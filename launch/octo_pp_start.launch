@@ -1,0 +1,17 @@
+<launch>
+        <include file="$(find fuxi-planner)/launch/mavros_posix_sitl.launch">
+		<arg name="world" value="$(find fuxi-planner)/worlds/test2_static.world"/>
+        </include>
+	<include file="$(find fuxi-planner)/launch/plc_filter_rgb.launch">
+	</include>
+	<node name="rviz" pkg="rviz" type="rviz" args="-d $(find fuxi-planner)/launch/Octomap_planning_demo.rviz" required="true" />
+	<node pkg="fuxi-planner" type="vo_repub_rec" name="Odom2Pose" output="screen">
+       		 <param name="sub_type" type="string" value="Odometry" />
+       		 <param name="sub_topic" type="string" value="/gt_iris_base_link_imu" />
+		<param name="repub_type" type="string" value="PoseStamped" />
+		<param name="repub_topic" type="string" value="/mavros/vision_pose/pose" />
+		<!--output_file_path = "0" disable the file output function-->
+		<param name="output_file_path" type="string" value="0" />
+   	 </node>
+
+</launch>
