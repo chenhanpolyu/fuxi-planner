@@ -133,6 +133,7 @@ class global_planner():
         self.path_pub = rospy.Publisher('/jps_path', Path, queue_size=1)
         self.map_pub=rospy.Publisher('/global_map', OccupancyGrid, queue_size=5)
         self.goalpub = rospy.Publisher('/goal_global', Point, queue_size=1)  #static points
+        self.visualgoalpub = rospy.Publisher('/visual_goal_global', Marker, queue_size=1)
         # self.local_vel_sub = rospy.Subscriber('mavros/local_position/velocity_local',
         #                               TwistStamped,
         #                               self.velocity_callback,queue_size=1,buff_size=52428800)
@@ -203,6 +204,29 @@ class global_planner():
         mapg.info.origin.position.y=map_ori[1]
         mapg.data=list(data.T.reshape(mapg.info.width*mapg.info.height,1)[:,0]) #T?
         self.map_pub.publish(mapg)
+    def publish_goal(self,goal_p):
+        goal = Marker()
+        goal.header.frame_id = "map"
+        goal.header.stamp = rospy.Time.now()
+        goal.type = Marker.SPHERE
+        # goal.pose.position.x = self.velo_goal[0]
+        # goal.pose.position.y = self.velo_goal[1]
+        # goal.pose.position.z = self.velo_goal[2]
+        goal.pose.position.x = goal_p[0]
+        goal.pose.position.y = goal_p[1]
+        goal.pose.position.z = goal_p[2]
+        goal.pose.orientation.x = 0
+        goal.pose.orientation.y = 0
+        goal.pose.orientation.z = 0
+        goal.pose.orientation.w = 0
+        goal.scale.x = 0.3
+        goal.scale.y = 0.3
+        goal.scale.z = 0.3
+        goal.color.a = 1
+        goal.color.r = 1
+        goal.color.g = 1
+        goal.color.b = 0.0
+        self.visualgoalpub.publish(goal)
 if __name__ == '__main__':
     # global pub,rate,point2,pos
 
@@ -263,7 +287,7 @@ if __name__ == '__main__':
             map_reso=planner.map_reso
             mapu = planner.remove_zero_rowscols(planner.map ,px,py)
 #            print("removed empty,mapu",mapu)
-        if mapu is not 0 and planner.pos is not None and (planner.map_reso is not None) and (planner.map_c1>2*ifa) and (planner.map_o is not None):#and (convert.vel is not None)
+        if (mapu is not 0) and (planner.pos is not None) and (planner.map_reso is not None) and (planner.map_c1>2*ifa) and (planner.map_o is not None):#and (convert.vel is not None)
 #            px,py,pz=planner.parse_local_position(planner.pos)
 
 #            map_reso=planner.map_reso
@@ -352,22 +376,26 @@ if __name__ == '__main__':
             mapu0=np.zeros([map_c+2,map_r+2])
             mapu0[map_d[0]+1:map_d[0]+len(mapu)+1,map_d[1]+1:map_d[1]+len(mapu[0])+1]=mapu
             mapu=mapu0
+            map_start = map_start+1+map_d
+            map_goal = map_goal+map_d+1
             if mapu[map_goal[0],map_goal[1]]==1:  #when an obstacle locates at the goal
                 try:
                     map_goal[1]=np.where(mapu[map_goal[0],:]==0)[0][np.argmin(abs(np.where(mapu[map_goal[0],:]==0)-map_goal[1]))]
                 except:
                     map_goal[0]=np.where(mapu[:,map_goal[1]]==0)[0][np.argmin(abs(np.where(mapu[:,map_goal[1]]==0)-map_goal[0]))]
                 end_occu = 1
+            else:
+                end_occu = 0
                 # if map_goal[0]==map_c-1:
                 #     map_goal[1]=np.where(mapu[-1,:]==0)[0][np.argmin(abs(np.where(mapu[-1,:]==0)-map_goal[1]))]
                 # elif map_goal[1]==map_r-1:
                 #     map_goal[0]=np.where(mapu[:,-1]==0)[0][np.argmin(abs(np.where(mapu[:,-1]==0)-map_goal[0]))]
             
 
-            if (map_start+1+map_d)[0]>map_c or (map_start+1+map_d)[1]>map_r:
+            if (map_start)[0]>map_c or (map_start)[1]>map_r:
                 wp=global_goal
             else:
-                path1 = jps1.method(mapu, tuple(map_start+map_d+1), tuple(map_goal+map_d+1), 2)
+                path1 = jps1.method(mapu, tuple(map_start), tuple(map_goal), 2)
             
                 if path1[0] is 0:
                     # print(mapu,map_start,map_goal,map_o,path1) #
@@ -390,22 +418,25 @@ if __name__ == '__main__':
                     for k in range(1,len(path2)):
                         
                         map_wp=path2[k]
-                        if abs(math.atan2((path2[-1]-map_start-1)[0],(path2[-1]-map_start-1)[1])-math.atan2((map_wp-map_start-1)[0],(map_wp-map_start-1)[1]))<=ang_wp and np.linalg.norm(map_wp-(map_start+map_d+1))>4:
+                        if abs(math.atan2((path2[-1]-map_start)[0],(path2[-1]-map_start)[1])-math.atan2((map_wp-map_start)[0],(map_wp-map_start)[1]))<=ang_wp and np.linalg.norm(map_wp-(map_start))>2:
                             map_wp=path2[k-1]
                             wp=map_wp*map_reso+map_o
                             break
-                        ang_wp=abs(math.atan2((path2[-1]-map_start-1)[0],(path2[-1]-map_start-1)[1])-math.atan2((map_wp-map_start-1)[0],(map_wp-map_start-1)[1]))
+                        ang_wp=abs(math.atan2((path2[-1]-map_start)[0],(path2[-1]-map_start)[1])-math.atan2((map_wp-map_start)[0],(map_wp-map_start)[1]))
+                    print("ang_wp",ang_wp)
                     uav2next_wp=np.linalg.norm(wp[0:2]-np.array([px,py]))
                     if_goal=uav2next_wp+ang_wp
                     if end_occu == 1:
+                        print("end point is occupied, ")
                         wp = np.array([px,py,pz])
-                    elif not(len(path2)>2 and (uav2next_wp>dis_wp_tre or (ang_wp>ang_wp_tre and ang_wp<math.pi*0.5))):  #remove the useless points 
-                        wp=global_goal
+                        global_goal = wp
+                    elif (len(path2)>2 and (uav2next_wp>dis_wp_tre or (ang_wp>ang_wp_tre and ang_wp<math.pi*0.5))):  #remove the useless points 
+                        print('wp not global goal:',wp)
                         # wp=map_wp*map_reso+map_o
                         # if not(len(path2)>2 and np.linalg.norm(wp-np.array([px,py]))<1):
                         #     break
                     else:
-                        print('wp not global goal:',wp)
+                        wp=global_goal
             # wp=global_goal
          # if np.linalg.norm(global_goal[0:2]-np.array([px,py]))<0.5:
             #     ii+=1
@@ -413,32 +444,44 @@ if __name__ == '__main__':
             #     pointw.z=0
             # else:
             #     pointw.z=1+min(np.linalg.norm(wp[0:2]-np.array([xo,yo]))/np.linalg.norm(global_goal[0:2]-np.array([xo,yo])),1)*(global_goal[2]-1)
-            pointw.z=1+min(np.linalg.norm(wp[0:2]-np.array([xo,yo]))/np.linalg.norm(global_goal[0:2]-np.array([xo,yo])),1)*(global_goal[2]-1)
+            if np.linalg.norm(global_goal[0:2]-np.array([px,py]))<0.5:
+                pointw.z=0
+            else:
+                pointw.z=1+min(np.linalg.norm(wp[0:2]-np.array([xo,yo]))/np.linalg.norm(global_goal[0:2]-np.array([xo,yo])),1)*(global_goal[2]-1)
             print('position:',[px,py,pz])
 
         else:
             if planner.pos is not None:
+
                 px,py,pz=planner.parse_local_position(planner.pos)
+                if planner.global_goal is not None:
+                    global_goal = planner.global_goal
+                else:
+                    global_goal = np.array([px,py,1])
                 # if np.linalg.norm(global_goal[0:2]-np.array([px,py]))<0.5:
                 #     ii+=1
                 # if ii==len(global_goal_list):
                 #     pointw.z=0
                 # else:
                 #     pointw.z=global_goal[2]
-                wp=np.array([px,py,pz])
-                pointw.z = 1
+                wp=global_goal
+                if np.linalg.norm(global_goal[0:2]-np.array([px,py]))<0.5:
+                    pointw.z=0
+                else:
+                    pointw.z = 1
         protime=time.clock()-starttime1
 
-        if wp is not None and mapu is not 0:
+        if wp is not None :
             # print(point2)
             
             pointw.x=wp[0]
             pointw.y=wp[1]
             
             planner.goalpub.publish(pointw)
+            planner.publish_goal([pointw.x,pointw.y,pointw.z])
             if path3 is not None:
                 planner.publish_path(path3)
-            if map_o is not None:
+            if (map_o is not None) and( mapu is not 0):
                 planner.publish_map(mapu,map_o)
             rate.sleep()
 #        if planner.pos is not None and (planner.octo_plc is not None) :
@@ -471,7 +514,7 @@ if __name__ == '__main__':
             mapsave[np.where(mapu==0)]=255
             mapsave=mapsave.T[::-1]
             im = Image.fromarray(np.uint8(mapsave)).convert('RGB')
-            fname="/home/"+ getpass.getuser() +"/catkin_ws/src/uav_planning_demo/path_plan/maps/"+'%.2f'%map_o[0]+'%.2f'%map_o[1]+"_out.png"
+            fname="/home/"+ getpass.getuser() +"/catkin_ws/src/fuxi-planner/maps/"+'%.2f'%map_o[0]+'%.2f'%map_o[1]+"_out.png"
             im.save(fname)
         print('next goal:',pointw)
         print('global_planner protime:',protime)

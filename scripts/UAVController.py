@@ -29,8 +29,8 @@ class StateMachineError(Exception):
 class UAVController(object):
     def register(self):
         self.startpos=[0,0,0]
-        self.f1 = open("/home/" + getpass.getuser() +"/catkin_ws/src/uav_planning_demo/path_plan/data/"+time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time()))+"OT.txt", 'a')
-        self.f2 = open("/home/" + getpass.getuser() +"/catkin_ws/src/uav_planning_demo/path_plan/data/"+time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time()))+"PV.txt", 'a')
+        self.f1 = open("/home/" + getpass.getuser() +"/catkin_ws/src/fuxi-planner/data/"+time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time()))+"OT.txt", 'a')
+        self.f2 = open("/home/" + getpass.getuser() +"/catkin_ws/src/fuxi-planner/data/"+time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time()))+"PV.txt", 'a')
         # self.f.write('number of points   '+'find wp iters   '+'find wp time   '+'optimization time   '+'step  time  '+'position*3  '+'velocity*3  '+'attitude*3'+'\n')
 #        self.path=[]
         self.steptime=[]
@@ -180,9 +180,9 @@ class UAVController(object):
             yaw=-yaw
         # if abs(yaw-y)>math.pi:
         #    yaw=(2*math.pi-abs(yaw))*np.sign(-yaw)
-        while abs(rz-1.1)>0.1 or abs(yaw-y)>0.3 :
-#            print('z error and yaw error:',abs(rz-1.0),abs(yaw-y))
-            self.set_local_position(rx,ry,1.5,yaw)
+        while abs(rz-1.0)>0.1 or abs(yaw-y)>0.3 :
+            # print('z error and yaw error:',abs(rz-1.0),abs(yaw-y))
+            self.set_local_position(rx,ry,1.0,yaw)
             yaw=math.atan2(self.goal[1]-ry,self.goal[0]-rx)
             if abs(yaw-y)>math.pi:
                yaw=-yaw
@@ -297,6 +297,7 @@ class UAVController(object):
             self.ifend=1
             self.goal[0:2]=np.array([data.x,data.y])
         else:
+            self.ifend=0
             self.goal=np.array([data.x,data.y,data.z])
         
     def Imu_callback(self, data):
@@ -402,6 +403,7 @@ class UAVController(object):
                                                                                             state,loc_goal,local_ori[0],local_ori[1],local_ori[2],self.loc_goal_old,self.f_angle,self.path_rec,self.pretime,
                                                                                             self.dyn_time,self.if_direct,self.no_path,self.pp_restart,self.pcl_time)
         self.f1.write(str(pointnum)+" ,"+str(iternum)+" ,"+str(wptime)+" ,"+str(optitime)+" ,"+str(steptime)+" ,"+str(traj_dif)+"\n")
+        print("write data")
         self.velo_goal=self.loc_goal_old*0.5+local_pos
         self.steptime.append(steptime)
         vel = TwistStamped()
@@ -430,14 +432,16 @@ class UAVController(object):
 #           yaw=(2*math.pi-abs(yaw))*np.sign(-yaw)
 #        vel.angular.z = self.pid.step(yaw-y)
         self.vel=vel
-        if len(self.old_goal)!= 0 and (self.old_goal != self.goal).any():
-            while abs(yaw-y)>math.pi/10:
-                rx,ry,rz,r,p,y=self.parse_local_position("e")
-                yaw=math.atan2(self.goal[1]-ry,self.goal[0]-rx)
-                if abs(yaw-y)>math.pi:
-                    yaw=(2*math.pi-abs(yaw))*np.sign(-yaw)
+        if abs(yaw-y) > math.pi/2: #len(self.old_goal)!= 0 and (self.old_goal != self.goal).any():
+            # while abs(yaw-y)>math.pi/10:
+            for i in range(10):
+                # rx,ry,rz,r,p,y=self.parse_local_position("e")
+                # yaw=math.atan2(self.goal[1]-ry,self.goal[0]-rx)
+                # if abs(yaw-y)>math.pi:
+                #     yaw=(2*math.pi-abs(yaw))*np.sign(-yaw)
                 self.set_local_position(rx,ry,rz,yaw)
                 print(yaw,y)
+                rospy.sleep(0.05)
             print("position cmd published!")
             self.pp_restart = 1
 

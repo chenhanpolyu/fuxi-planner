@@ -235,6 +235,7 @@ if __name__ == '__main__':
         
 #        print(convert.pos,convert.plc)
         if convert.pos is not None and (convert.plc is not None) and convert.if_align == 1:#and (convert.vel is not None)
+            # print("11")
             convert.if_align = 0
             px,py,pz,r,p,y=convert.parse_local_position(convert.pos)
 #            if len(t_plc)>0:

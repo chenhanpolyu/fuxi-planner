@@ -346,6 +346,14 @@ Visualization Manager:
       Topic: /gt_iris_base_link_imu
       Unreliable: false
       Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /visual_goal_global
+      Name: Marker
+      Namespaces:
+        "": true
+      Queue Size: 100
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -374,25 +382,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 14.295807838439941
+      Distance: 10.296212196350098
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -0.5548546314239502
-        Y: -0.8567439317703247
-        Z: 7.864349842071533
+        X: -1.2600058317184448
+        Y: -0.4449347257614136
+        Z: 7.229038715362549
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.1497975587844849
+      Pitch: 0.7497979402542114
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 3.151754140853882
+      Yaw: 3.136753797531128
     Saved: ~
 Window Geometry:
   Displays:

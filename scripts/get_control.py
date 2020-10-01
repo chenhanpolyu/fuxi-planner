@@ -24,10 +24,10 @@ class control_method():
     @staticmethod
     def init(self):
         # robot parameter
-        self.max_speed = 1.5  # [m/s]  # max speed
+        self.max_speed = 1.0  # [m/s]  # max speed
         # self.min_speed = -0.5  # [m/s]  # min speed
         self.m_speed = self.max_speed  # [m/s]  # max speed
-        self.min_speed = 1.0  # [m/s]  # min speed
+        self.min_speed = 0.8  # [m/s]  # min speed
 #        self.max_accel = self.max_speed*0.5  # [m/ss]  # max accelerate
         self.max_accel = 4.0
         self.dt = 0.02  # [s]  # simulation period
@@ -871,11 +871,7 @@ class control_method():
             plc=plc-local_pos
             plc=plc[::2]
             
-            if len(plc)>self.p_num*1:
-                
-                plc_1=plc[int(self.p_num/2)::3]
-                plc=np.r_[plc[0:int(self.p_num/2)],plc_1]
-                plc=control_method.distance_filter(self,plc,f_angle,loc_goal)
+
         num_dyn=0
         if len(plcall)>0:
             if plcall[-1][0]!=0:
@@ -895,23 +891,16 @@ class control_method():
             if len(plcall)>0:
                 # print(plcall)
                 plcall=plcall-local_pos
-                plcall=control_method.distance_filter(self,plcall,f_angle,loc_goal)
+                if len(plcall)>self.p_num*1:
+                    
+                    plcall_1=plcall[int(self.p_num/2)::3]
+                    plcall=np.r_[plcall[0:int(self.p_num/2)],plcall_1]
+                    plcall=control_method.distance_filter(self,plcall,f_angle,loc_goal)
                 
 #                if len(plcall)>self.p_num*0.8:
 #                    plcall_1=plcall[int(self.p_num/2)::2]
 #                    plcall=np.r_[plcall[0:int(self.p_num/2)],plcall_1]
-        min_dis=0
-        if num_dyn != 0:
-            dyn_time  =pretime
-        self.num_dyn = num_dyn
-        if len(plc) >0 and len(plcall)>0:
-            min_dis=min(np.linalg.norm(plc[0]),np.linalg.norm(plcall[0]))
-#             min_dis=np.linalg.norm(plcall[0])
-        elif len(plcall)>3:
-            min_dis=np.linalg.norm(plcall[0])
-        elif len(plc)>3:
-#            min_dis=np.linalg.norm(plc[0])*(1-0.2)+self.detect_l*0.2
-            min_dis=np.linalg.norm(plc[0])
+
 # 
         # if min_dis !=0 and num_dyn ==0:
         #     self.max_speed=max(self.max_speed*(min_dis/self.detect_l)**1,self.min_speed)
@@ -928,6 +917,18 @@ class control_method():
         elif len(plc)==0:    #only for dynobs rviz simulation
             plc=np.array([[100,100,1]])
 
+        min_dis=0
+        if num_dyn != 0:
+            dyn_time  =pretime
+        self.num_dyn = num_dyn
+        if len(plc) >0 and len(plcall)>0:
+            min_dis=min(np.linalg.norm(plc[0]),np.linalg.norm(plcall[0]))
+#             min_dis=np.linalg.norm(plcall[0])
+        elif len(plcall)>3:
+            min_dis=np.linalg.norm(plcall[0])
+        elif len(plc)>3:
+#            min_dis=np.linalg.norm(plc[0])*(1-0.2)+self.detect_l*0.2
+            min_dis=np.linalg.norm(plc[0])
         loc_goal,f_angle,no_path=control_method.get_localgoal(self,local_pos,plc,f_angle,loc_goal,loc_goal_old,path_rec,state.copy(),no_path)  # get the local goal in 2d map
         starttime2 = time.clock()
         # control,c_goal=control_method.calculate(self,control,loc_goal,state.copy(),plc,b2e,path_rec)

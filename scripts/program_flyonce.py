@@ -207,7 +207,7 @@ class Program1(UAVController):
 
         self.path_pub = rospy.Publisher('/uav_path', Path, queue_size=10)
         self.ros_rate = 100
-        self.cross_times = 2
+        self.cross_times = 5
 
     # def plan_motion(self, path, t_interval):
     #     p3 = path[3]
@@ -239,8 +239,9 @@ class Program1(UAVController):
         # if self.vel is not None:
         #     self.pos_setvel_pub.publish(self.vel)
         time_interval = 0.05
-        px, py, pz = self.goal
+        
         if len(self.goal) > 0:
+            px, py, pz = self.goal
             # p_gate = self.gate_info["x"], self.gate_info["y"], self.gate_info["z"]
             # q_gate = self.gate_info["qx"], self.gate_info["qy"], self.gate_info["qz"], self.gate_info["qw"]
             ux, uy, uz, uR, uP, uY = self.parse_local_position("e")
@@ -249,9 +250,9 @@ class Program1(UAVController):
                 self.publish_locwp(np.linalg.norm([vx,vy,vz]))
 
             self.f2.write(' ,'.join([str(x) for x in [ux,uy,uz]])+" ,"+' ,'.join([str(x) for x in [vx,vy,vz]])+" ,"+' ,'.join([str(x) for x in [uR,uP,uY]])+" ,"+str(time.time())+"\n")
-#            print('ifend',self.ifend)
+            print('ifend',self.ifend)
             pos_uav = np.array([ux, uy, uz])
-            if self.ifend==0 and np.linalg.norm(np.array([px, py, pz])- pos_uav)> 0.3:
+            if self.ifend==0 :#and np.linalg.norm(np.array([px, py, pz])- pos_uav)> 0.3:
                 
                 # self.traj = self.plan(pos_uav)
                 if time.time()-self.time_pub>1:
@@ -273,7 +274,7 @@ class Program1(UAVController):
                 self.tick=0
                 self.set_velocity()
 
-            else:
+            elif np.linalg.norm(np.array([px, py, pz])- pos_uav)< 0.5:
                 # px, py, pz = self.goal
                 if self.tick==0:
                     print('goal reached, fly to: %s , cross time remained: %s' %([px, py, pz],self.cross_times-1))
@@ -283,7 +284,7 @@ class Program1(UAVController):
                 # else:
                 #     self.set_local_position(px, py, pz,0)#uY)
                 # self.set_local_position(0,0,1.5,0)
-                print("publish position command")
+                print("publish position command",self.tick)
                 self.set_local_position(px, py, pz,uY)
                 self.tick += 1
                 
