@@ -28,6 +28,7 @@ class global_planner():
         self.map_t=[self.map_o[0]+self.map_c1*self.map_reso,self.map_o[1]+self.map_r1*self.map_reso]
         self.origin=data.info.origin
         self.if_map_pub = 1
+        self.if_map_empty = 0
         
     def goal_callback(self,goal):
         self.global_goal = np.array([goal.point.x,goal.point.y,1.0])
@@ -35,7 +36,7 @@ class global_planner():
     def remove_zero_rowscols(self,X,px,py):
         # X is a scipy sparse matrix. We want to remove all zero rows from it
         while self.if_map_pub != 1:
-            rospy.sleep(0.05)
+            rospy.sleep(0.02)
         if self.if_map_pub == 1:
             
             nonzero_row_indice, nonzero_col_indice = X.nonzero()
@@ -55,6 +56,7 @@ class global_planner():
                 x_row=X[min(map_mat_o[0],map_start0[0]):max(u_row_indice)]
                 self.if_map_pub = 0
                 print("map row and col:",self.map_r,self.map_c,self.map_o)
+                self.if_map_empty = 1
                 return x_row[:,min(map_mat_o[1],map_start0[1]):max(u_col_indice)] #,u_col_indice
             else:
 #                self.if_map_empty = 1
@@ -127,11 +129,11 @@ class global_planner():
         # run simultaneously.
 
         rospy.init_node('global_planner', anonymous=True)
-        self.if_map_pub = 1
+        
 #        self.if_map_empty = 0
 #        self.octo_pub = rospy.Publisher('/octomap_point_cloud_centers_local', PointCloud2, queue_size=1)
         self.path_pub = rospy.Publisher('/jps_path', Path, queue_size=1)
-        self.map_pub=rospy.Publisher('/global_map', OccupancyGrid, queue_size=5)
+        self.map_pub=rospy.Publisher('/global_map', OccupancyGrid, queue_size=1)
         self.goalpub = rospy.Publisher('/goal_global', Point, queue_size=1)  #static points
         self.visualgoalpub = rospy.Publisher('/visual_goal_global', Marker, queue_size=1)
         # self.local_vel_sub = rospy.Subscriber('mavros/local_position/velocity_local',
@@ -147,7 +149,7 @@ class global_planner():
         
         self.globalgoal_sub = rospy.Subscriber('/clicked_point',
                                     PointStamped,
-                                    self.goal_callback)
+                                    self.goal_callback,queue_size=1)
 #        self.octo_plc_sub = rospy.Subscriber('/localmap',
 #                                          Marker,
 #                                          self.octo_callback,queue_size=1,buff_size=52428800)
@@ -229,10 +231,11 @@ class global_planner():
         self.visualgoalpub.publish(goal)
 if __name__ == '__main__':
     # global pub,rate,point2,pos
-
+    rospy.sleep(3)
     planner=global_planner()
     planner.listener()
     planner.global_goal = None
+    planner.if_map_pub = 1
     # convert.vel=None
     planner.pos=None
     planner.map=None
@@ -299,7 +302,7 @@ if __name__ == '__main__':
             map_c=planner.map_c
             map_r=planner.map_r
             map_o=planner.map_o
-            mapc=mapu.copy()
+            
             ori_pre=[-15,-15]  #the pre-settled origin coordinates
             if ct==1:
                 xo,yo,zo=planner.parse_local_position(planner.pos)
@@ -330,11 +333,7 @@ if __name__ == '__main__':
             # elif map_start[1]<0:
             #     map_start[1]=0
 #            print('mapc',map_c-ifa+1,map_r-ifa+1,ifa+1)
-            for i in range(ifa,map_c-ifa+1,1):
-                for j in range(ifa,map_r-ifa+1,1):
-                    if len(mapu)>1 and (mapu[i-ifa:i+ifa+1,j-ifa:j+ifa+1]>0).any():
-                        mapc[i,j]=1
-            mapu=mapc
+
             if map_pre is not None: #merge the prepared map and the detected map
                 # print(map_o,ori_pre)
                 map_o1=[min(map_o[0],ori_pre[0]),min(map_o[1],ori_pre[1])]  #oringin of the new map
@@ -354,14 +353,15 @@ if __name__ == '__main__':
             map_goal=((global_goal[0:2]-map_o)/map_reso).astype(int)
             map_start=((np.array([px,py])-map_o)/map_reso).astype(int)
             map_goal0=map_goal.copy()
-            map_d=np.array([0,0])
-            map_o2=np.array([0,0])
+            # map_d=np.array([0,0])
+            map_o2=np.array([-2*ifa,-2*ifa])
             if map_goal[0]<0 or map_start[0]<0:
-                map_o2[0]=min(map_goal[0],map_start[0])
+                map_o2[0]=min(map_goal[0],map_start[0])+map_o2[0]
             if map_goal[1]<0 or map_start[1]<0:
-                map_o2[1]=min(map_goal[1],map_start[1])
+                map_o2[1]=min(map_goal[1],map_start[1])+map_o2[1]# map_o2 : the pixel replacement of the new origin against the old origin
             map_d=abs(map_o2)
             map_o=list((map_o2)*map_reso+np.array(map_o))
+
             # wp=global_goal
             # print('map_o,map_start,map_goal',map_o,map_start,map_goal)
             # else:
@@ -371,13 +371,28 @@ if __name__ == '__main__':
                 # if map_goal[1]>map_r:
                 #     map_goal[1]=map_r-1
 
-            map_c=max(map_c,map_goal[0]+1,map_start[0]+1)+map_d[0]
-            map_r=max(map_r,map_goal[1]+1,map_start[1]+1)+map_d[1]
-            mapu0=np.zeros([map_c+2,map_r+2])
-            mapu0[map_d[0]+1:map_d[0]+len(mapu)+1,map_d[1]+1:map_d[1]+len(mapu[0])+1]=mapu
+            map_c=max(map_c,map_goal[0],map_start[0])+map_d[0]
+            map_r=max(map_r,map_goal[1],map_start[1])+map_d[1]
+            mapu0=np.zeros([map_c+4*ifa,map_r+4*ifa])
+            mapu0[2*ifa:len(mapu)+2*ifa,2*ifa:len(mapu[0])+2*ifa]=mapu
             mapu=mapu0
-            map_start = map_start+1+map_d
-            map_goal = map_goal+map_d+1
+            # mapc=mapu.copy()
+            # for i in range(ifa,map_c-ifa+1,1):
+            #     for j in range(ifa,map_r-ifa+1,1):
+            #         if len(mapu)>1 and (mapu[i-ifa:i+ifa+1,j-ifa:j+ifa+1]>0).any():
+            #             mapc[i,j]=1
+            mapu_occu_list = np.where(mapu>0)
+            print(mapu_occu_list)
+            # mapu_occu_ary = np.c_[np.array(mapu_occu_list[0]),np.array(mapu_occu_list[1])]
+            # print(np.array(mapu_occu_ary))
+            for i in range(-ifa,ifa+1,ifa):
+                for j in range(-ifa,ifa+1,ifa):
+                    mapu[(mapu_occu_list[0]+i,mapu_occu_list[1]+j)] = 1
+            # mapu=mapc
+            
+            
+            map_start = map_start+map_d
+            map_goal = map_goal+map_d
             if mapu[map_goal[0],map_goal[1]]==1:  #when an obstacle locates at the goal
                 try:
                     map_goal[1]=np.where(mapu[map_goal[0],:]==0)[0][np.argmin(abs(np.where(mapu[map_goal[0],:]==0)-map_goal[1]))]
@@ -402,7 +417,7 @@ if __name__ == '__main__':
                     print('no path')
                     wp=global_goal
                 else:
-                    path2 = np.array(path1[0])
+                    path2 = np.array(path1[0])+np.array([1,0])
                     path3=path2*map_reso+map_o
                     # if end_occu == 1:
                     #     path3 = path3[::-1]
@@ -424,6 +439,8 @@ if __name__ == '__main__':
                             break
                         ang_wp=abs(math.atan2((path2[-1]-map_start)[0],(path2[-1]-map_start)[1])-math.atan2((map_wp-map_start)[0],(map_wp-map_start)[1]))
                     print("ang_wp",ang_wp)
+                    if wp is None:
+                        wp = global_goal
                     uav2next_wp=np.linalg.norm(wp[0:2]-np.array([px,py]))
                     if_goal=uav2next_wp+ang_wp
                     if end_occu == 1:
@@ -470,7 +487,7 @@ if __name__ == '__main__':
                 else:
                     pointw.z = 1
         protime=time.clock()-starttime1
-
+        # rospy.sleep(0.05)
         if wp is not None :
             # print(point2)
             
@@ -483,7 +500,8 @@ if __name__ == '__main__':
                 planner.publish_path(path3)
             if (map_o is not None) and( mapu is not 0):
                 planner.publish_map(mapu,map_o)
-            rate.sleep()
+            
+            rospy.sleep(0.05)
 #        if planner.pos is not None and (planner.octo_plc is not None) :
 #            px,py,pz=planner.parse_local_position(planner.pos)
 #            local_pos = np.array([px,py,pz])

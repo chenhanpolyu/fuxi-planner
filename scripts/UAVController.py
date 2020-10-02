@@ -3,7 +3,7 @@ import rospy
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu,PointCloud2,PointField
 from mavros_msgs.msg import Altitude, ExtendedState, HomePosition, State, WaypointList, AttitudeTarget
-from geometry_msgs.msg import PoseStamped, TwistStamped,AccelStamped
+from geometry_msgs.msg import PoseStamped, TwistStamped,AccelStamped,PointStamped
 from geometry_msgs.msg import Twist, Vector3Stamped, Pose, Point, Quaternion, Vector3,Accel
 from sensor_msgs import point_cloud2
 from visualization_msgs.msg import MarkerArray, Marker
@@ -57,6 +57,7 @@ class UAVController(object):
         self.if_direct = True
         self.no_path = 1
         self.pp_restart = 0
+        self.global_goal = None
         rospy.init_node('UAV_controller')
         rospy.loginfo("UAV_controller started!")
         self.goal_sub = rospy.Subscriber('/goal_global',
@@ -111,7 +112,13 @@ class UAVController(object):
                                                 Subscriber('/points_global_all',PointCloud2)],
         6,0.03, allow_headerless=True)
         self.tss.registerCallback(self.pos_vel)
+        self.globalgoal_sub = rospy.Subscriber('/clicked_point',
+                            PointStamped,
+                            self.global_goal_callback)
         
+    def global_goal_callback(self,goal):
+        self.global_goal = np.array([goal.point.x,goal.point.y,1.0])
+        print('goal received!!')
     def pos_vel(self,pos,vel,pcl):
         # self.ros_data["local_position"] = pos.pose
         self.ros_data["local_position"] = pos
@@ -213,9 +220,9 @@ class UAVController(object):
         vel.twist.linear.z = 0
         vel.twist.angular.x = 0#pid.step(0-r)
         vel.twist.angular.y = 0#pid.step(0-p)
-        yaw=math.atan2(self.goal[1]-ry,self.goal[0]-rx)
+        yaw=math.atan2(self.global_goal[1]-ry,self.global_goal[0]-rx)
         while abs(yaw-y)>0.1:
-            yaw=math.atan2(self.goal[1]-ry,self.goal[0]-rx)
+            yaw=math.atan2(self.global_goal[1]-ry,self.global_goal[0]-rx)
             if abs(yaw-y)>math.pi:
                yaw=-yaw
             vel.twist.angular.z = self.pid.step(yaw-y)
@@ -410,7 +417,9 @@ class UAVController(object):
         vel.header = Header()
         vel.header.frame_id = "map"
         vel.header.stamp = rospy.Time.now()
-        yaw=math.atan2(self.goal[1]-ry,self.goal[0]-rx)
+        if self.global_goal is None:
+            self.global_goal = self.goal
+        yaw=math.atan2(self.global_goal[1]-ry,self.global_goal[0]-rx)
         if abs(yaw-y)>math.pi:
             yaw=(2*math.pi-abs(yaw))*np.sign(-yaw)
 #        if abs(yaw-y)>math.pi/10:
@@ -454,7 +463,7 @@ class UAVController(object):
         else:
             self.pos_setvel_pub.publish(self.vel)
             self.pp_restart = 0
-        self.old_goal = self.goal.copy()
+        self.old_goal = self.global_goal.copy()
         if len(plc_use) !=0:
             plc_use=self.xyz_array_to_pointcloud2(np.array(plc_use),'map',rospy.Time.now())
             self.pcl_use_pub.publish(plc_use)

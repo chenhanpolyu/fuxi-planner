@@ -24,7 +24,7 @@ class control_method():
     @staticmethod
     def init(self):
         # robot parameter
-        self.max_speed = 1.0  # [m/s]  # max speed
+        self.max_speed = 1.5  # [m/s]  # max speed
         # self.min_speed = -0.5  # [m/s]  # min speed
         self.m_speed = self.max_speed  # [m/s]  # max speed
         self.min_speed = 0.8  # [m/s]  # min speed
@@ -52,7 +52,7 @@ class control_method():
         self.upb=4
         self.downb=0.5
         self.iter=0
-        self.p_num=60  #max number of points for collision check
+        self.p_num=70  #max number of points for collision check
         self.acc_CD=1.7  #parameter of acceleration expanding coefficient for avoiding moving obstacle
         self.wps=[]
         self.dmin=[]
