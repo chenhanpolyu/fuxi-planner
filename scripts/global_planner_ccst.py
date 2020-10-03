@@ -382,7 +382,7 @@ if __name__ == '__main__':
             #         if len(mapu)>1 and (mapu[i-ifa:i+ifa+1,j-ifa:j+ifa+1]>0).any():
             #             mapc[i,j]=1
             mapu_occu_list = np.where(mapu>0)
-            print(mapu_occu_list)
+            # print(mapu_occu_list)
             # mapu_occu_ary = np.c_[np.array(mapu_occu_list[0]),np.array(mapu_occu_list[1])]
             # print(np.array(mapu_occu_ary))
             for i in range(-ifa,ifa+1,ifa):

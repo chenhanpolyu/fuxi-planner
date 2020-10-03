@@ -42,7 +42,7 @@ class global_planner():
 
         rospy.init_node('global_planner', anonymous=True)
         self.path_pub = rospy.Publisher('/jps_path', Path, queue_size=1)
-        self.map_pub=rospy.Publisher('/global_map', OccupancyGrid, queue_size=5)
+        self.map_pub=rospy.Publisher('/global_map', OccupancyGrid, queue_size=2)
         self.goalpub = rospy.Publisher('/goal_global', Point, queue_size=1)  #static points
         # self.local_vel_sub = rospy.Subscriber('mavros/local_position/velocity_local',
         #                               TwistStamped,
@@ -202,11 +202,11 @@ if __name__ == '__main__':
             # elif map_start[1]<0:
             #     map_start[1]=0
             # print('mapu',mapu)
-            for i in range(ifa,map_c-ifa+1):
-                for j in range(ifa,map_r-ifa+1):
-                    if len(mapu)>1 and (mapu[i-ifa:i+ifa+1,j-ifa:j+ifa+1]>0).any():
-                        mapc[i,j]=1
-            mapu=mapc
+            # for i in range(ifa,map_c-ifa+1):
+            #     for j in range(ifa,map_r-ifa+1):
+            #         if len(mapu)>1 and (mapu[i-ifa:i+ifa+1,j-ifa:j+ifa+1]>0).any():
+            #             mapc[i,j]=1
+            # mapu=mapc
             if map_pre is not None: #merge the prepared map and the detected map
                 # print(map_o,ori_pre)
                 map_o1=[min(map_o[0],ori_pre[0]),min(map_o[1],ori_pre[1])]  #oringin of the new map
@@ -226,14 +226,14 @@ if __name__ == '__main__':
             map_goal=((global_goal[0:2]-map_o)/map_reso).astype(int)
             map_start=((np.array([px,py])-map_o)/map_reso).astype(int)
             map_goal0=map_goal.copy()
-            map_d=np.array([0,0])
-            map_o2=np.array([0,0])
+            # map_d=np.array([0,0])
+            map_o2=np.array([-2*ifa,-2*ifa])
             if map_goal[0]<0 or map_start[0]<0:
-                map_o2[0]=min(map_goal[0],map_start[0])
+                map_o2[0]=min(map_goal[0],map_start[0])+map_o2[0]
             if map_goal[1]<0 or map_start[1]<0:
-                map_o2[1]=min(map_goal[1],map_start[1])
+                map_o2[1]=min(map_goal[1],map_start[1])+map_o2[1]# map_o2 : the pixel replacement of the new origin against the old origin
             map_d=abs(map_o2)
-            map_o=list((map_o2-1)*map_reso+np.array(map_o))
+            map_o=list((map_o2)*map_reso+np.array(map_o))
             # wp=global_goal
             # print('map_o,map_start,map_goal',map_o,map_start,map_goal)
             # else:
@@ -243,38 +243,57 @@ if __name__ == '__main__':
                 # if map_goal[1]>map_r:
                 #     map_goal[1]=map_r-1
 
-            map_c=max(map_c,map_goal[0]+1,map_start[0]+1)+map_d[0]
-            map_r=max(map_r,map_goal[1]+1,map_start[1]+1)+map_d[1]
-            mapu0=np.zeros([map_c+2,map_r+2])
-            mapu0[map_d[0]+1:map_d[0]+len(mapu)+1,map_d[1]+1:map_d[1]+len(mapu[0])+1]=mapu
+            map_c=max(map_c,map_goal[0],map_start[0])+map_d[0]
+            map_r=max(map_r,map_goal[1],map_start[1])+map_d[1]
+            mapu0=np.zeros([map_c+4*ifa,map_r+4*ifa])
+            mapu0[2*ifa:len(mapu)+2*ifa,2*ifa:len(mapu[0])+2*ifa]=mapu
             mapu=mapu0
+            # mapc=mapu.copy()
+            # for i in range(ifa,map_c-ifa+1,1):
+            #     for j in range(ifa,map_r-ifa+1,1):
+            #         if len(mapu)>1 and (mapu[i-ifa:i+ifa+1,j-ifa:j+ifa+1]>0).any():
+            #             mapc[i,j]=1
+            mapu_occu_list = np.where(mapu>0)
+            # print(mapu_occu_list)
+            # mapu_occu_ary = np.c_[np.array(mapu_occu_list[0]),np.array(mapu_occu_list[1])]
+            # print(np.array(mapu_occu_ary))
+            for i in range(-ifa,ifa+1,ifa):
+                for j in range(-ifa,ifa+1,ifa):
+                    mapu[(mapu_occu_list[0]+i,mapu_occu_list[1]+j)] = 1
+            # mapu=mapc
+            
+            
+            map_start = map_start+map_d-1
+            map_goal = map_goal+map_d-1
             if mapu[map_goal[0],map_goal[1]]==1:  #when an obstacle locates at the goal
                 try:
                     map_goal[1]=np.where(mapu[map_goal[0],:]==0)[0][np.argmin(abs(np.where(mapu[map_goal[0],:]==0)-map_goal[1]))]
                 except:
                     map_goal[0]=np.where(mapu[:,map_goal[1]]==0)[0][np.argmin(abs(np.where(mapu[:,map_goal[1]]==0)-map_goal[0]))]
                 end_occu = 1
+            else:
+                end_occu = 0
                 # if map_goal[0]==map_c-1:
                 #     map_goal[1]=np.where(mapu[-1,:]==0)[0][np.argmin(abs(np.where(mapu[-1,:]==0)-map_goal[1]))]
                 # elif map_goal[1]==map_r-1:
                 #     map_goal[0]=np.where(mapu[:,-1]==0)[0][np.argmin(abs(np.where(mapu[:,-1]==0)-map_goal[0]))]
             
 
-            if (map_start+1+map_d)[0]>map_c or (map_start+1+map_d)[1]>map_r:
+            if (map_start)[0]>map_c or (map_start)[1]>map_r:
                 wp=global_goal
             else:
-                path1 = jps1.method(mapu, tuple(map_start+map_d+1), tuple(map_goal+map_d+1), 2)
+                path1 = jps1.method(mapu, tuple(map_start), tuple(map_goal), 2)
             
                 if path1[0] is 0:
                     # print(mapu,map_start,map_goal,map_o,path1) #
                     print('no path')
                     wp=global_goal
                 else:
-                    path2 = np.array(path1[0])
+                    path2 = np.array(path1[0])+np.array([1,1])
                     path3=path2*map_reso+map_o
                     # path3 = np.r_[path3,[global_goal[0:2]]]
-                    if end_occu == 1:
-                        path3 = path3[::-1]
+                    # if end_occu == 1:
+                    #     path3 = path3[::-1]
                     # print('path3',path3)
                     path3=np.c_[path3,np.zeros([len(path3),1])]
                     ang_wp=0
@@ -286,15 +305,19 @@ if __name__ == '__main__':
                     for k in range(1,len(path2)):
                         
                         map_wp=path2[k]
-                        if abs(math.atan2((path2[-1]-map_start-1)[0],(path2[-1]-map_start-1)[1])-math.atan2((map_wp-map_start-1)[0],(map_wp-map_start-1)[1]))<=ang_wp and np.linalg.norm(map_wp-(map_start+map_d+1))>2:
+                        if abs(math.atan2((path2[-1]-map_start)[0],(path2[-1]-map_start)[1])-math.atan2((map_wp-map_start)[0],(map_wp-map_start)[1]))<=ang_wp and np.linalg.norm(map_wp-map_start)>2:
                             map_wp=path2[k-1]
                             wp=map_wp*map_reso+map_o
                             break
-                        ang_wp=abs(math.atan2((path2[-1]-map_start-1)[0],(path2[-1]-map_start-1)[1])-math.atan2((map_wp-map_start-1)[0],(map_wp-map_start-1)[1]))
+                        ang_wp=abs(math.atan2((path2[-1]-map_start)[0],(path2[-1]-map_start)[1])-math.atan2((map_wp-map_start)[0],(map_wp-map_start)[1]))
+                    if wp is None:
+                        wp = global_goal
                     uav2next_wp=np.linalg.norm(wp[0:2]-np.array([px,py]))
                     if_goal=uav2next_wp+ang_wp
                     if end_occu == 1:
+                        print("end point is occupied, ")
                         wp = np.array([px,py,pz])
+                        global_goal = wp
                     elif not(len(path2)>2 and (uav2next_wp>dis_wp_tre or (ang_wp>ang_wp_tre and ang_wp<math.pi*0.5))):  #remove the useless points 
                         wp=global_goal
                         # wp=map_wp*map_reso+map_o
