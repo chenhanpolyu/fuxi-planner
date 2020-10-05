@@ -54,15 +54,15 @@ class global_planner():
         self.globalmap_sub = rospy.Subscriber('/projected_map',
                                       OccupancyGrid,
                                       self.map_callback)
-        self.globalgoal_sub = rospy.Subscriber('/clicked_point',
-                              PointStamped,
-                              self.goal_callback)
+        self.globalgoal_sub = rospy.Subscriber('/move_base_simple/goal',
+                                    PoseStamped,
+                                    self.goal_callback,queue_size=1)
         # add_thread = threading.Thread(target = thread_job)
         # add_thread.start()
         # rospy.spin()
     
     def goal_callback(self,goal):
-        self.global_goal = np.array([goal.point.x,goal.point.y,1.5])
+        self.global_goal = np.array([goal.pose.position.x, goal.pose.position.y, 1.5])
         print('goal received!!')
     def parse_local_position(self,local_position, mode="q"):
         # global rx,ry,rz,rpy_eular
@@ -115,7 +115,7 @@ class global_planner():
         self.map_pub.publish(mapg)
 if __name__ == '__main__':
     # global pub,rate,point2,pos
-
+    rospy.sleep(3)
     planner=global_planner()
     planner.global_goal = None
     planner.listener()
@@ -246,7 +246,7 @@ if __name__ == '__main__':
             map_c=max(map_c,map_goal[0],map_start[0])+map_d[0]
             map_r=max(map_r,map_goal[1],map_start[1])+map_d[1]
             mapu0=np.zeros([map_c+4*ifa,map_r+4*ifa])
-            mapu0[2*ifa:len(mapu)+2*ifa,2*ifa:len(mapu[0])+2*ifa]=mapu
+            mapu0[map_d[0]:len(mapu)+map_d[0],map_d[1]:len(mapu[0])+map_d[1]]=mapu
             mapu=mapu0
             # mapc=mapu.copy()
             # for i in range(ifa,map_c-ifa+1,1):

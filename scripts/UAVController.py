@@ -112,12 +112,12 @@ class UAVController(object):
                                                 Subscriber('/points_global_all',PointCloud2)],
         6,0.03, allow_headerless=True)
         self.tss.registerCallback(self.pos_vel)
-        self.globalgoal_sub = rospy.Subscriber('/clicked_point',
-                            PointStamped,
-                            self.global_goal_callback)
+        self.globalgoal_sub = rospy.Subscriber('/move_base_simple/goal',
+                                    PoseStamped,
+                                    self.global_goal_callback,queue_size=1)
         
     def global_goal_callback(self,goal):
-        self.global_goal = np.array([goal.point.x,goal.point.y,1.0])
+        self.global_goal = np.array([goal.pose.position.x, goal.pose.position.y, 1.5])
         print('goal received!!')
     def pos_vel(self,pos,vel,pcl):
         # self.ros_data["local_position"] = pos.pose

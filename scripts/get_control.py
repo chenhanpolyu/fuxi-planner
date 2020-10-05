@@ -24,12 +24,12 @@ class control_method():
     @staticmethod
     def init(self):
         # robot parameter
-        self.max_speed = 1.5  # [m/s]  # max speed
+        self.max_speed = 2.0  # [m/s]  # max speed
         # self.min_speed = -0.5  # [m/s]  # min speed
         self.m_speed = self.max_speed  # [m/s]  # max speed
-        self.min_speed = 0.8  # [m/s]  # min speed
+        self.min_speed = 1.5  # [m/s]  # min speed
 #        self.max_accel = self.max_speed*0.5  # [m/ss]  # max accelerate
-        self.max_accel = 4.0
+        self.max_accel = 3.5
         self.dt = 0.02  # [s]  # simulation period
         self.max_jerk = 3
         self.predict_coe = 1  # [s]  # predict coefficient
@@ -37,23 +37,24 @@ class control_method():
         self.to_goal_cost_gain = 6.0  # goal_cost_gain
         self.to_obs_cost_gain = 0.0  # obs_cost_gain
         self.speed_cost_gain = 15     # speed_cost_gain
-        self.uav_r = 0.5  # [m]  # uav safe radius
+        self.uav_r = 0.45  # [m]  # uav safe radius ,0.45 for static
         self.detect_l = 3 # [m]  # detectsion radius
         self.det_ang = pi/16
         self.map_reso = 0.2 # [m]  # map resolution
         self.startpoint=np.array([3.0,3.0,0.0])    # start point
-        self.endpoint=np.array([94.0,94.0,0.0])  #goal,assume the size is 100m*100m
+        self.endpoint=np.array([94.0,94.0,0.0])    #goal,assume the size is 100m*100m
         self.error=0.5             # if the uav reach the goal
         self.global_l = 100 
         self.x0 = np.append(self.startpoint,np.array([0,0,0,0,0,0])).astype(float)
         self.dd = int(self.uav_r/self.map_reso)+1
         self.plc_distance=3
-        self.pred_coe = 1
+        self.pred_coe = 0.5
         self.upb=4
         self.downb=0.5
+        self.vel_coe = 0.7
         self.iter=0
         self.p_num=70  #max number of points for collision check
-        self.acc_CD=1.7  #parameter of acceleration expanding coefficient for avoiding moving obstacle
+        self.acc_CD=2  #parameter of acceleration expanding coefficient for avoiding moving obstacle
         self.wps=[]
         self.dmin=[]
         self.c_dyn=[]
@@ -320,7 +321,7 @@ class control_method():
 #            para_g=1
 #        
         
-        ve=self.max_speed*loc_goal/d_goal
+        # ve=self.max_speed*loc_goal/d_goal
 #        self.max_accel = 6
 #        if self.obs_v==1:
 #            # print('position and goal',state[0:3],loc_goal+state[0:3],'control:',res.x)
@@ -341,6 +342,7 @@ class control_method():
 #            self.min_speed = self.max_speed-0.1
         if self.obs_v==1:
             self.max_accel*=self.acc_CD
+            self.vel_coe += 0.2
         if self.no_path:
             self.max_accel*=2
             print("no path found, accel increase",self.no_path)
@@ -360,8 +362,10 @@ class control_method():
         speed_cost_gain=self.speed_cost_gain
         if self.obs_v==1:
             para_g=np.linalg.norm(state[3:6])*pred_dt/d_goal
+            ve=self.max_speed*loc_goal/d_goal
             ae=(ve-state[3:6])/pred_dt
-            x0=np.array([ae[0],ae[1],ae[2],pred_dt])
+            x0=np.array([max(min(ae[0],self.max_accel-0.2),-self.max_accel+0.2),max(min(ae[1],self.max_accel-0.2),-self.max_accel+0.2),
+max(min(ae[2],self.max_accel-0.2),-self.max_accel+0.2),pred_dt])
             to_goal_cost_gain = self.to_goal_cost_gain
             bons = ((-self.max_accel, self.max_accel), (-self.max_accel, self.max_accel), (-self.max_accel, self.max_accel), (0,pred_dt*1.2 ))
             cons = (
@@ -379,10 +383,12 @@ class control_method():
         else:
             if self.max_speed == self.min_speed:
                 self.max_speed = self.min_speed + 0.1
-            para_g = 0.05
+            para_g = 0.07
             # para_g=np.linalg.norm(state[3:6])*pred_dt/d_goal
-            ae=(ve-state[3:6])/pred_dt #(d_goal*para_g/np.linalg.norm(state[3:6]))
-            x0=np.array([ae[0],ae[1],ae[2],d_goal*para_g/np.linalg.norm(state[3:6])])
+            ve=np.linalg.norm(state[3:6])*loc_goal/d_goal
+            ae=(ve-state[3:6])/(d_goal*para_g/np.linalg.norm(state[3:6])*self.vel_coe) #pred_dt 
+            x0=np.array([max(min(ae[0],self.max_accel-0.2),-self.max_accel+0.2),max(min(ae[1],self.max_accel-0.2),-self.max_accel+0.2),
+max(min(ae[2],self.max_accel-0.2),-self.max_accel+0.2),d_goal*para_g/np.linalg.norm(state[3:6])])
             # pp_d1 = np.linalg.norm(np.cross(traj_end,loc_goal*para_g))/np.linalg.norm(loc_goal*para_g)*para_d
             bons = ((-self.max_accel, self.max_accel), (-self.max_accel, self.max_accel), (-self.max_accel, self.max_accel), (d_goal*para_g/self.max_speed,3 ))
             cons = (# {'type': 'ineq', 'fun': lambda x: -np.linalg.norm(x[0:3])+self.max_accel},\
@@ -431,11 +437,12 @@ class control_method():
         # elif np.linalg.norm(res.x[0:3]) > self.max_accel:
         #     res.x[0:3] = res.x[0:3]/np.linalg.norm(res.x[0:3])*self.max_accel
         if state[2]-self.downb<0.1 and res.x[3] >0:
-            res.x[2] = 4
+            res.x[2] = 6
         if state[2]-self.upb>-1 and res.x[3] >0:
             res.x[2] = -0.7
-        print('set velocity:',[vx+res.x[0]*res.x[3]*0.7,vy+res.x[1]*res.x[3]*0.7,vz+res.x[2]*res.x[3]*0.7])
-        return vx+res.x[0]*res.x[3]*0.7,vy+res.x[1]*res.x[3]*0.7,vz+res.x[2]*res.x[3]*0.7,traj_dif
+        print('set velocity:',[vx+res.x[0]*res.x[3]*self.vel_coe,vy+res.x[1]*res.x[3]*self.vel_coe,vz+res.x[2]*res.x[3]*self.vel_coe])
+        set_vel = [vx+res.x[0]*res.x[3]*self.vel_coe,vy+res.x[1]*res.x[3]*self.vel_coe,vz+res.x[2]*res.x[3]*self.vel_coe]
+        return set_vel[0],set_vel[1],set_vel[2],traj_dif
     @staticmethod
     def fun(x,px,py,pz,vx,vy,vz,ax,ay,az,obstacle,dt,loc_goal,control_gain,speed_cost_gain,para_g):
         # speed =np.linalg.norm(np.array([vx,vy,vz]))
@@ -459,7 +466,7 @@ class control_method():
     @staticmethod
     def calculate1(self,control,loc_goal,state,obstacle,b2e,path_rec,min_dis):
 
-        self.max_accel = min(0.5 , self.max_speed*0.3)
+        self.max_accel = min(0.8 , self.max_speed*0.5)
         # loc_goal = np.matmul(b2e, loc_goal)
         d_goal=np.linalg.norm(loc_goal)
         vx=self.max_speed*loc_goal[0]/d_goal#v
@@ -595,7 +602,7 @@ class control_method():
         # Traj=np.array([px+x[0],py+x[1]])
         if len(obstacle)==0:
             d_ob=float("inf")
-        elif no_path_last == 2 and np.linalg.norm(loc_goal_old-x) < 0.5:
+        elif no_path_last == 2 and np.linalg.norm(loc_goal_old-x) < 0.3:
             d_ob = 0
         elif np.linalg.norm(obstacle[0]) < self.uav_r * 0.7:
             d_ob = 0
@@ -614,14 +621,14 @@ class control_method():
                 avoi_ang=[]
                 avoi_angyz=[]
                 vlist=[]
-                safe_c=0.3
-                dyn_sf_r = self.uav_r + safe_c
+                safe_c= 0.2
+                dyn_sf_r = min(self.uav_r + safe_c +max(self.r_dyn) ,0.9)
                 vc=0
                 dis=[]
                 msp_coe = 1.0
                 # print('c_dyn:',self.c_dyn,'v_dyn:',self.v_dyn)
                 uav_v=x*np.linalg.norm(self.velocity)/np.linalg.norm(x)
-                self.v_dyn =np.array(self.v_dyn) * 1.2
+                self.v_dyn =np.array(self.v_dyn) * 1.0
                 for i in range(len(self.c_dyn)):
                     rela_v=x*self.velocity/np.linalg.norm(x)-self.v_dyn[i]
                     bc=np.linalg.norm(rela_v)
@@ -639,15 +646,15 @@ class control_method():
 #                if dis<safe_c*dyn_sf_r: #considering the shape of the dynobs and the safe radious, the dis should be much bigger than uav_r 
 #                    d_ob=dis
 #                print('np.array(dis)-(dyn_sf_r+self.r_dyn)',np.array(dis)-(dyn_sf_r+self.r_dyn))
-                if (np.array(dis)-(dyn_sf_r+self.r_dyn)<0).any(): #considering the shape of the dynobs and the safe radious, the dis should be much bigger than uav_r 
+                if (np.array(dis)-(dyn_sf_r)<0).any(): #considering the shape of the dynobs and the safe radious, the dis should be much bigger than uav_r 
                     d_ob=dis[np.argmin(np.array(dis)-(dyn_sf_r+self.r_dyn))]
 #                    d_ob=abs(min(np.array(dis)-(dyn_sf_r+self.r_dyn)))
                     dis=d_ob
                     
-                else:
-                    self.obs_v=1
-                    self.max_speed= np.linalg.norm(self.velocity)
-#                    d_ob=0
+                #else:
+                    #self.obs_v=1
+                    #self.max_speed= np.linalg.norm(self.velocity)
+
                 if d_ob!=float("inf"):
                     avoi_ang=np.array(avoi_ang).reshape(1,-1)[0]
                     avoi_angyz=np.array(avoi_angyz).reshape(1,-1)[0]
@@ -662,11 +669,13 @@ class control_method():
                             avoi_v=np.array([sin(ang_v),cos(ang_v)])
                             print('avoi_v',avoi_v)
                             # print(np.r_[uav_v[0:2],-avoi_v].reshape(2,2).T)
+			    
                             vmod=np.dot(np.linalg.inv(np.r_[uav_v[0:2],-avoi_v].reshape(2,2).T),np.array(self.v_dyn[int(vnum/2)][0:2]))[0]
-                            print('vmod',vmod)
+                            
                             uav_v_nxt=x*vmod/np.linalg.norm(x)
+                            print('vmod',vmod,'uav_v_nxt',uav_v_nxt)
                            # ( np.linalg.norm(uav_v_nxt[0:2]- self.velocity[0:2]) < self.acc_CD*self.max_accel*self.pred_dt and 
-                            if np.linalg.norm(uav_v_nxt[0:2]- self.velocity[0:2]) < self.acc_CD*self.max_accel*self.pred_dt:# or (vmod<0 and vmod>-0.3*self.max_speed):
+                            if vmod > 0 and np.linalg.norm(uav_v_nxt[0:2]- self.velocity[0:2]) < self.acc_CD*self.max_accel*self.pred_dt*2:# or (vmod<0 and vmod>-0.3*self.max_speed):
                                 vlist.append(vmod)
                                 d_ob=float("inf")
                                 self.obs_v=1
@@ -687,10 +696,11 @@ class control_method():
                             print('avoi_v',avoi_v)
                             # print(np.r_[uav_v[0:2],-avoi_v].reshape(2,2).T)
                             vmod=np.dot(np.linalg.inv(np.r_[uav_v[1:3],-avoi_v].reshape(2,2).T),np.array(self.v_dyn[int(vnum/2)][1:3]))[0]
-                            print('vmod',vmod)
+                            
                             uav_v_nxt=x*vmod/np.linalg.norm(x)
+                            print('vmod',vmod,'uav_v_nxt',uav_v_nxt)
                              # ( np.linalg.norm(uav_v_nxt[1:3]- self.velocity[1:3]) < self.acc_CD*self.max_accel*self.pred_dt and
-                            if np.linalg.norm(uav_v_nxt[1:3]- self.velocity[1:3]) < self.acc_CD*self.max_accel*self.pred_dt:# or (vmod<0 and vmod>-0.3*self.max_speed):
+                            if vmod > 0 and np.linalg.norm(uav_v_nxt[1:3]- self.velocity[1:3]) < self.acc_CD*self.max_accel*self.pred_dt*2:# or (vmod<0 and vmod>-0.3*self.max_speed):
                                 vlist.append(vmod)
                                 d_ob=float("inf")
                                 self.obs_v=1
@@ -707,12 +717,13 @@ class control_method():
                         sp1=max(vlist)
                         sp2=min(vlist)
                         sp=np.array([sp1,sp2])
-                        if sp1>self.max_speed and sp2<self.max_speed:            #find the final speed in the list of feasible speed (vlist)
-                            self.max_speed=sp[np.argmin(abs(sp-self.max_speed))]
-                        elif sp1>self.max_speed and sp2>self.max_speed:
-                            self.max_speed=max(sp)
-                        elif sp1<self.max_speed and sp2<self.max_speed:
-                            self.max_speed=min(sp)
+          #              if sp1>self.max_speed and sp2<self.max_speed:            #find the final speed in the list of feasible speed (vlist)
+          #                  self.max_speed=sp[np.argmin(abs(sp-self.max_speed))]
+          #              elif sp1>self.max_speed and sp2>self.max_speed:
+          #                  self.max_speed=max(sp)
+          #              elif sp1<self.max_speed and sp2<self.max_speed:
+          #                  self.max_speed=min(sp)
+                        self.max_speed=sp[np.argmin(abs(sp-np.linalg.norm(self.velocity)))]
                         print("speed:",vlist,self.max_speed)
                         # dv=np.linalg.norm(x*self.max_speed/np.linalg.norm(x)-self.velocity)
                         # if dv>self.acc_CD*self.max_accel:
@@ -871,7 +882,11 @@ class control_method():
             plc=plc-local_pos
             plc=plc[::2]
             
-
+            if len(plc)>self.p_num*1:
+                
+                plc_1=plc[int(self.p_num*2/3)::3]
+                plc=np.r_[plc[0:int(self.p_num*2/3)],plc_1]
+                plc=control_method.distance_filter(self,plc,f_angle,loc_goal)
         num_dyn=0
         if len(plcall)>0:
             if plcall[-1][0]!=0:
@@ -881,7 +896,8 @@ class control_method():
                 pcl_dt = now.secs + now.nsecs*1e-9 - pcl_time
                 print("pcl_dt:",pcl_dt)
                 self.v_dyn=plcall[-1-2*num_dyn:-num_dyn-1]
-#                print(np.array(self.v_dyn))
+                # print(np.array(plcall[-1-3*num_dyn:-2*num_dyn-1]) ,np.array(self.v_dyn))
+                print(plcall[-1-3*num_dyn::])
                 self.c_dyn=np.array(plcall[-1-3*num_dyn:-2*num_dyn-1]) + np.array(self.v_dyn) * self.pred_coe*(pred_dt+pcl_dt)
                 self.r_dyn=0.5*np.array(plcall[-num_dyn-1:-1])[:,0]
                 
@@ -891,16 +907,23 @@ class control_method():
             if len(plcall)>0:
                 # print(plcall)
                 plcall=plcall-local_pos
-                if len(plcall)>self.p_num*1:
-                    
-                    plcall_1=plcall[int(self.p_num/2)::3]
-                    plcall=np.r_[plcall[0:int(self.p_num/2)],plcall_1]
-                    plcall=control_method.distance_filter(self,plcall,f_angle,loc_goal)
+                plcall=control_method.distance_filter(self,plcall,f_angle,loc_goal)
                 
 #                if len(plcall)>self.p_num*0.8:
 #                    plcall_1=plcall[int(self.p_num/2)::2]
 #                    plcall=np.r_[plcall[0:int(self.p_num/2)],plcall_1]
-
+        min_dis=0
+        if num_dyn != 0:
+            dyn_time  =pretime
+        self.num_dyn = num_dyn
+        if len(plc) >0 and len(plcall)>0:
+            min_dis=min(np.linalg.norm(plc[0]),np.linalg.norm(plcall[0]))
+#             min_dis=np.linalg.norm(plcall[0])
+        elif len(plcall)>3:
+            min_dis=np.linalg.norm(plcall[0])
+        elif len(plc)>3:
+#            min_dis=np.linalg.norm(plc[0])*(1-0.2)+self.detect_l*0.2
+            min_dis=np.linalg.norm(plc[0])
 # 
         # if min_dis !=0 and num_dyn ==0:
         #     self.max_speed=max(self.max_speed*(min_dis/self.detect_l)**1,self.min_speed)
@@ -917,18 +940,6 @@ class control_method():
         elif len(plc)==0:    #only for dynobs rviz simulation
             plc=np.array([[100,100,1]])
 
-        min_dis=0
-        if num_dyn != 0:
-            dyn_time  =pretime
-        self.num_dyn = num_dyn
-        if len(plc) >0 and len(plcall)>0:
-            min_dis=min(np.linalg.norm(plc[0]),np.linalg.norm(plcall[0]))
-#             min_dis=np.linalg.norm(plcall[0])
-        elif len(plcall)>3:
-            min_dis=np.linalg.norm(plcall[0])
-        elif len(plc)>3:
-#            min_dis=np.linalg.norm(plc[0])*(1-0.2)+self.detect_l*0.2
-            min_dis=np.linalg.norm(plc[0])
         loc_goal,f_angle,no_path=control_method.get_localgoal(self,local_pos,plc,f_angle,loc_goal,loc_goal_old,path_rec,state.copy(),no_path)  # get the local goal in 2d map
         starttime2 = time.clock()
         # control,c_goal=control_method.calculate(self,control,loc_goal,state.copy(),plc,b2e,path_rec)
@@ -940,7 +951,7 @@ class control_method():
         # elif num_dyn != 0 or np.linalg.norm(self.velocity) > self.max_speed*0.3 :
         else:
             vx,vy,vz,traj_dif = control_method.calculate(self,control,loc_goal,state.copy(),plc,b2e,path_rec,pred_dt)
-        if traj_dif > 0.05 and num_dyn ==0:
+        if traj_dif > 0.08 and num_dyn ==0:
             vx,vy,vz = control_method.calculate1(self,control,loc_goal,state.copy(),plc,b2e,path_rec,min_dis)
              #test:velocity control
         steptime = (time.clock() - starttime1)
@@ -956,3 +967,4 @@ class control_method():
 #           '\nget_localgoal time cost:',np.mean(timerec[:,1]),
 #           '\ncontrol time cost:',np.mean(timerec[:,2]),
 #           '\nfind goal time:',np.mean(fgtime))
+

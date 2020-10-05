@@ -31,7 +31,7 @@ class global_planner():
         self.if_map_empty = 0
         
     def goal_callback(self,goal):
-        self.global_goal = np.array([goal.point.x,goal.point.y,1.0])
+        self.global_goal = np.array([goal.pose.position.x, goal.pose.position.y, 1.5])
         print('goal received!!')
     def remove_zero_rowscols(self,X,px,py):
         # X is a scipy sparse matrix. We want to remove all zero rows from it
@@ -147,8 +147,8 @@ class global_planner():
                                       OccupancyGrid,
                                       self.map_callback,queue_size=1)
         
-        self.globalgoal_sub = rospy.Subscriber('/clicked_point',
-                                    PointStamped,
+        self.globalgoal_sub = rospy.Subscriber('/move_base_simple/goal',
+                                    PoseStamped,
                                     self.goal_callback,queue_size=1)
 #        self.octo_plc_sub = rospy.Subscriber('/localmap',
 #                                          Marker,
@@ -374,7 +374,7 @@ if __name__ == '__main__':
             map_c=max(map_c,map_goal[0],map_start[0])+map_d[0]
             map_r=max(map_r,map_goal[1],map_start[1])+map_d[1]
             mapu0=np.zeros([map_c+4*ifa,map_r+4*ifa])
-            mapu0[2*ifa:len(mapu)+2*ifa,2*ifa:len(mapu[0])+2*ifa]=mapu
+            mapu0[map_d[0]:len(mapu)+map_d[0],map_d[1]:len(mapu[0])+map_d[1]]=mapu
             mapu=mapu0
             # mapc=mapu.copy()
             # for i in range(ifa,map_c-ifa+1,1):
