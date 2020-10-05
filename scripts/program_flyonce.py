@@ -206,7 +206,7 @@ class Program1(UAVController):
         #                                       self.gate_pos_cb)
 
         self.path_pub = rospy.Publisher('/uav_path', Path, queue_size=10)
-        self.ros_rate = 100
+        self.ros_rate = 50
         self.cross_times = 5
 
     # def plan_motion(self, path, t_interval):
@@ -289,7 +289,7 @@ class Program1(UAVController):
                 self.tick += 1
                 
                 
-                if self.tick > 3.0 * self.ros_rate:
+                if self.tick > 200.0 * self.ros_rate:
                     if self.cross_times > 0:
                         self.user_control_reset()
                     else:

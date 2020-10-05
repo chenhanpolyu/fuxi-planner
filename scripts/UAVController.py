@@ -187,9 +187,9 @@ class UAVController(object):
             yaw=-yaw
         # if abs(yaw-y)>math.pi:
         #    yaw=(2*math.pi-abs(yaw))*np.sign(-yaw)
-        while abs(rz-1.0)>0.1 or abs(yaw-y)>0.3 :
-            # print('z error and yaw error:',abs(rz-1.0),abs(yaw-y))
-            self.set_local_position(rx,ry,1.0,yaw)
+        while abs(rz-1.5)>0.1 or abs(yaw-y)>0.3 :
+            print('z error and yaw error:',abs(rz-1.5),abs(yaw-y))
+            self.set_local_position(rx,ry,1.5,yaw)
             yaw=math.atan2(self.goal[1]-ry,self.goal[0]-rx)
             if abs(yaw-y)>math.pi:
                yaw=-yaw
@@ -448,7 +448,7 @@ class UAVController(object):
                 # yaw=math.atan2(self.goal[1]-ry,self.goal[0]-rx)
                 # if abs(yaw-y)>math.pi:
                 #     yaw=(2*math.pi-abs(yaw))*np.sign(-yaw)
-                self.set_local_position(rx,ry,rz,yaw)
+                self.set_local_position(rx,ry,1.5,yaw)
                 print(yaw,y)
                 rospy.sleep(0.05)
             print("position cmd published!")

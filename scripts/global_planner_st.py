@@ -62,7 +62,7 @@ class global_planner():
         # rospy.spin()
     
     def goal_callback(self,goal):
-        self.global_goal = np.array([goal.point.x,goal.point.y,1.0])
+        self.global_goal = np.array([goal.point.x,goal.point.y,1.5])
         print('goal received!!')
     def parse_local_position(self,local_position, mode="q"):
         # global rx,ry,rz,rpy_eular

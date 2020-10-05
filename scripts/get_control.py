@@ -370,7 +370,7 @@ class control_method():
                     # {'type': 'ineq', 'fun': lambda x: x[3]},\
                     # {'type': 'ineq', 'fun': lambda x: -x[3]+pred_dt*1.2}) #loc_goal is the Increment for position
             res = minimize(self.fun_dyn, x0, args=(px,py,pz,vx,vy,vz,ax,ay,az,obstacle,pred_dt,loc_goal,control_gain,speed_cost_gain,to_goal_cost_gain,para_g,ve),method='SLSQP',
-                       options={'maxiter':30},constraints=cons,bounds = bons,tol = 1e-2)
+                       options={'maxiter':20},constraints=cons,bounds = bons,tol = 1e-2)
             if res.x[3] > 0:
                 traj_dif = np.linalg.norm(np.array([vx+res.x[0]*res.x[3],vy+res.x[1]*res.x[3],vz+res.x[2]*res.x[3]])-ve)
             else:
@@ -392,7 +392,7 @@ class control_method():
                     # {'type': 'eq', 'fun': lambda x: np.linalg.norm(np.cross((np.array([vx,vy,vz])+x[0:3]*x[3]/2)*x[3],loc_goal*para_g))/(d_goal*para_g)})
                     # {'type': 'ineq', 'fun': lambda x: -x[3]+3}) #loc_goal is the Increment for position
             res = minimize(self.fun, x0, args=(px,py,pz,vx,vy,vz,ax,ay,az,obstacle,dt,loc_goal,control_gain,speed_cost_gain,para_g),method='SLSQP',
-                       options={'maxiter':20},constraints=cons,bounds = bons, tol = 1e-2)
+                       options={'maxiter':20},constraints=cons,bounds = bons, tol = 3e-2)
             # traj_end = ((np.array([vx,vy,vz])+res.x[0:3]*res.x[3]/2)*res.x[3])
             # pp_d = np.linalg.norm(np.cross(traj_end,loc_goal*para_g))/np.linalg.norm(loc_goal*para_g)
             if res.x[3] > 0:
@@ -431,7 +431,7 @@ class control_method():
         # elif np.linalg.norm(res.x[0:3]) > self.max_accel:
         #     res.x[0:3] = res.x[0:3]/np.linalg.norm(res.x[0:3])*self.max_accel
         if state[2]-self.downb<0.1 and res.x[3] >0:
-            res.x[2] = 1.5
+            res.x[2] = 4
         if state[2]-self.upb>-1 and res.x[3] >0:
             res.x[2] = -0.7
         print('set velocity:',[vx+res.x[0]*res.x[3]*0.7,vy+res.x[1]*res.x[3]*0.7,vz+res.x[2]*res.x[3]*0.7])
