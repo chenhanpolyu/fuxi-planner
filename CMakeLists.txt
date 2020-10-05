@@ -123,9 +123,9 @@ include_directories(
 # include
   ${catkin_INCLUDE_DIRS}
 )
-add_executable(vo_repub_rec
+add_executable(vo_republish_re
     src/vo_repub_rec.cpp)
-target_link_libraries(vo_repub_rec
+target_link_libraries(vo_republish_rec
     ${catkin_LIBRARIES})
 add_executable(chen_filter_rgb src/chen_filter_rgb.cpp)
 target_link_libraries(chen_filter_rgb ${catkin_LIBRARIES})
