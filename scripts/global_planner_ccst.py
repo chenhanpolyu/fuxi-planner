@@ -257,7 +257,7 @@ if __name__ == '__main__':
     wp=None
     map_o=None
     rosrate=80
-    ifa=1
+    ifa=2
     rate = rospy.Rate(rosrate) # 
     ang_wp_tre=math.pi/4
     dis_wp_tre=2
@@ -427,7 +427,7 @@ if __name__ == '__main__':
                     print('no path')
                     wp=global_goal
                 else:
-                    path2 = np.array(path1[0])+np.array([1,0])
+                    path2 = np.array(path1[0])+np.array([0,0])
                     path3=path2*map_reso+map_o
                     # if end_occu == 1:
                     #     path3 = path3[::-1]
@@ -488,7 +488,7 @@ if __name__ == '__main__':
             #     pointw.z=0
             # else:
             #     pointw.z=1+min(np.linalg.norm(wp[0:2]-np.array([xo,yo]))/np.linalg.norm(global_goal[0:2]-np.array([xo,yo])),1)*(global_goal[2]-1)
-            if np.linalg.norm(global_goal[0:2]-np.array([px,py]))<0.5:
+            if np.linalg.norm(global_goal[0:2]-np.array([px,py]))<0.5 :
                 pointw.z=0
             else:
                 pointw.z=1+min(np.linalg.norm(wp[0:2]-np.array([xo,yo]))/np.linalg.norm(global_goal[0:2]-np.array([xo,yo])),1)*(global_goal[2]-1)

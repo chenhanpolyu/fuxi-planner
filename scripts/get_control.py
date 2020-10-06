@@ -24,12 +24,12 @@ class control_method():
     @staticmethod
     def init(self):
         # robot parameter
-        self.max_speed = 2.0  # [m/s]  # max speed
+        self.max_speed = 1.0  # [m/s]  # max speed
         # self.min_speed = -0.5  # [m/s]  # min speed
         self.m_speed = self.max_speed  # [m/s]  # max speed
-        self.min_speed = 1.5  # [m/s]  # min speed
+        self.min_speed = 0.8  # [m/s]  # min speed
 #        self.max_accel = self.max_speed*0.5  # [m/ss]  # max accelerate
-        self.max_accel = 3.5
+        self.max_accel = 1.2
         self.dt = 0.02  # [s]  # simulation period
         self.max_jerk = 3
         self.predict_coe = 1  # [s]  # predict coefficient
@@ -37,8 +37,8 @@ class control_method():
         self.to_goal_cost_gain = 6.0  # goal_cost_gain
         self.to_obs_cost_gain = 0.0  # obs_cost_gain
         self.speed_cost_gain = 15     # speed_cost_gain
-        self.uav_r = 0.45  # [m]  # uav safe radius ,0.45 for static
-        self.detect_l = 3 # [m]  # detectsion radius
+        self.uav_r = 0.6  # [m]  # uav safe radius ,0.45 for static
+        self.detect_l = 3.5 # [m]  # detectsion radius
         self.det_ang = pi/16
         self.map_reso = 0.2 # [m]  # map resolution
         self.startpoint=np.array([3.0,3.0,0.0])    # start point
@@ -383,7 +383,7 @@ max(min(ae[2],self.max_accel-0.2),-self.max_accel+0.2),pred_dt])
         else:
             if self.max_speed == self.min_speed:
                 self.max_speed = self.min_speed + 0.1
-            para_g = 0.07
+            para_g = 0.1
             # para_g=np.linalg.norm(state[3:6])*pred_dt/d_goal
             ve=np.linalg.norm(state[3:6])*loc_goal/d_goal
             ae=(ve-state[3:6])/(d_goal*para_g/np.linalg.norm(state[3:6])*self.vel_coe) #pred_dt 
@@ -466,7 +466,7 @@ max(min(ae[2],self.max_accel-0.2),-self.max_accel+0.2),d_goal*para_g/np.linalg.n
     @staticmethod
     def calculate1(self,control,loc_goal,state,obstacle,b2e,path_rec,min_dis):
 
-        self.max_accel = min(0.8 , self.max_speed*0.5)
+        self.max_accel = min(0.5 , self.max_speed*0.6)
         # loc_goal = np.matmul(b2e, loc_goal)
         d_goal=np.linalg.norm(loc_goal)
         vx=self.max_speed*loc_goal[0]/d_goal#v
@@ -948,8 +948,8 @@ max(min(ae[2],self.max_accel-0.2),-self.max_accel+0.2),d_goal*para_g/np.linalg.n
         if no_path == 2:
             vx,vy,vz = 0,0,0
             print("no path found, go back!!!")
-        # elif num_dyn != 0 or np.linalg.norm(self.velocity) > self.max_speed*0.3 :
-        else:
+        elif np.linalg.norm(self.velocity) > self.max_speed*0.2 :
+        #else:
             vx,vy,vz,traj_dif = control_method.calculate(self,control,loc_goal,state.copy(),plc,b2e,path_rec,pred_dt)
         if traj_dif > 0.08 and num_dyn ==0:
             vx,vy,vz = control_method.calculate1(self,control,loc_goal,state.copy(),plc,b2e,path_rec,min_dis)

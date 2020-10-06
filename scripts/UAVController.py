@@ -35,7 +35,7 @@ class UAVController(object):
 #        self.path=[]
         self.steptime=[]
         self.velo_goal=[]
-        self.pid=PID(5,0.1,3,-0.5,0.5)
+        self.pid=PID(3,0.1,3,-0.5,0.5)
         self.g=9.8 #gravity
         # self.goal=np.array([-11,-11,1])
         self.goal=None
@@ -187,15 +187,12 @@ class UAVController(object):
             yaw=-yaw
         # if abs(yaw-y)>math.pi:
         #    yaw=(2*math.pi-abs(yaw))*np.sign(-yaw)
-        while abs(rz-1.5)>0.1 or abs(yaw-y)>0.3 :
-            print('z error and yaw error:',abs(rz-1.5),abs(yaw-y))
-            self.set_local_position(rx,ry,1.5,yaw)
-            yaw=math.atan2(self.goal[1]-ry,self.goal[0]-rx)
-            if abs(yaw-y)>math.pi:
-               yaw=-yaw
+        while abs(rz-1.5)>0.1:
+            print('z error and yaw error:',abs(rz-1.5))
+            self.set_local_position(rx,ry,1.5,y)
             
             _,_,rz,_,_,y=self.parse_local_position("e")
-            rospy.sleep(-1)
+            rospy.sleep(0.02)
 #        uavofb=MavrosTestCommon()
 #        uavofb.setUp()
 #        uavofb.set_mode("OFFBOARD", 10)
@@ -220,11 +217,16 @@ class UAVController(object):
         vel.twist.linear.z = 0
         vel.twist.angular.x = 0#pid.step(0-r)
         vel.twist.angular.y = 0#pid.step(0-p)
+        if self.global_goal is None:
+            self.global_goal = self.goal
         yaw=math.atan2(self.global_goal[1]-ry,self.global_goal[0]-rx)
+
+        if abs(yaw-y)>math.pi:
+            yaw=(2*math.pi-abs(yaw))*np.sign(-yaw)
         while abs(yaw-y)>0.1:
             yaw=math.atan2(self.global_goal[1]-ry,self.global_goal[0]-rx)
             if abs(yaw-y)>math.pi:
-               yaw=-yaw
+                yaw=(2*math.pi-abs(yaw))*np.sign(-yaw)
             vel.twist.angular.z = self.pid.step(yaw-y)
             self.pos_setvel_pub.publish(vel)
             rospy.sleep(-1)
@@ -298,6 +300,7 @@ class UAVController(object):
         self.angular_velocity_estimator.append(data)
         
     def goal_callback(self,data):
+	print("goal::::",data)
         if self.goal is None:
             self.goal=np.array([data.x,data.y,data.z])
         if data.z==0:
@@ -419,7 +422,7 @@ class UAVController(object):
         vel.header.stamp = rospy.Time.now()
         if self.global_goal is None:
             self.global_goal = self.goal
-        yaw=math.atan2(self.global_goal[1]-ry,self.global_goal[0]-rx)
+        yaw=math.atan2(self.goal[1]-ry,self.goal[0]-rx)
         if abs(yaw-y)>math.pi:
             yaw=(2*math.pi-abs(yaw))*np.sign(-yaw)
 #        if abs(yaw-y)>math.pi/10:
@@ -441,27 +444,28 @@ class UAVController(object):
 #           yaw=(2*math.pi-abs(yaw))*np.sign(-yaw)
 #        vel.angular.z = self.pid.step(yaw-y)
         self.vel=vel
-        if abs(yaw-y) > math.pi/2: #len(self.old_goal)!= 0 and (self.old_goal != self.goal).any():
-            # while abs(yaw-y)>math.pi/10:
-            for i in range(10):
-                # rx,ry,rz,r,p,y=self.parse_local_position("e")
-                # yaw=math.atan2(self.goal[1]-ry,self.goal[0]-rx)
-                # if abs(yaw-y)>math.pi:
-                #     yaw=(2*math.pi-abs(yaw))*np.sign(-yaw)
-                self.set_local_position(rx,ry,1.5,yaw)
+        if abs(yaw-y) > math.pi/6: #len(self.old_goal)!= 0 and (self.old_goal != self.goal).any():
+            while abs(yaw-y)>math.pi/6:
+            #for i in range(10):
+                rx,ry,rz,r,p,y=self.parse_local_position("e")
+                yaw=math.atan2(self.goal[1]-ry,self.goal[0]-rx)
+      	        if abs(yaw-y)>math.pi:
+                    yaw=(2*math.pi-abs(yaw))*np.sign(-yaw)
+                self.set_local_position(rx,ry,1.5,y+(yaw-y)*0.1)
                 print(yaw,y)
-                rospy.sleep(0.05)
+                rospy.sleep(0.02)
             print("position cmd published!")
             self.pp_restart = 1
 
-#            print("velocity cmd published!")
+#            
         elif self.no_path == 2:
             for i in range(10):
                 self.set_local_position(self.path_rec[-2][0],self.path_rec[-2][1],self.path_rec[-2][2],yaw)
-                rospy.sleep(0.1)
+                rospy.sleep(0.05)
                 del self.path_rec[-2::]
         else:
             self.pos_setvel_pub.publish(self.vel)
+	    print("velocity cmd published!-uav controller")
             self.pp_restart = 0
         self.old_goal = self.global_goal.copy()
         if len(plc_use) !=0:
@@ -564,7 +568,7 @@ class UAVController(object):
                 if ret:
                     # self.prepare_offboard()
                     self.take_off()
-                    # self.turn_to_goal()
+                    self.turn_to_goal()
                     state = "program"
                     rospy.loginfo("now starting user program!")
 

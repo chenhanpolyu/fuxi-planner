@@ -241,7 +241,10 @@ class Program1(UAVController):
         time_interval = 0.05
         
         if len(self.goal) > 0:
-            px, py, pz = self.goal
+	    if self.global_goal is not None and self.ifend == 0:
+            	px, py, pz = self.global_goal
+	    else:
+		px, py, pz = self.goal
             # p_gate = self.gate_info["x"], self.gate_info["y"], self.gate_info["z"]
             # q_gate = self.gate_info["qx"], self.gate_info["qy"], self.gate_info["qz"], self.gate_info["qw"]
             ux, uy, uz, uR, uP, uY = self.parse_local_position("e")
@@ -274,7 +277,7 @@ class Program1(UAVController):
                 self.tick=0
                 self.set_velocity()
 
-            elif np.linalg.norm(np.array([px, py, pz])- pos_uav)< 0.5:
+            elif np.linalg.norm(np.array([px, py, pz])- pos_uav)< 0.6:
                 # px, py, pz = self.goal
                 if self.tick==0:
                     print('goal reached, fly to: %s , cross time remained: %s' %([px, py, pz],self.cross_times-1))
