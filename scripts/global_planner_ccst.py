@@ -229,12 +229,22 @@ class global_planner():
         goal.color.g = 1
         goal.color.b = 0.0
         self.visualgoalpub.publish(goal)
+    def poly(self,x1,y1,x2,y2,x3,y3): #
+        # a1 = -((y2-y3)*x1-(x2-x3)*y1+x2*x3-x3*y2)/((x2-x3)*(x1-x2)*(x1-x3))
+        # b1 = ((y2-y3)*x1**2+x2**2*y3-x3**2*y2-(x2**2-x3**2)*y1) / ((x2-x3)*(x1-x2)*(x1-x2))
+        # # c1 = ((x2*y3-x3*y2)*x1**2-(x2**2-x3**2)*x1+(x2**2*x3-x2*x3**2)*y1)/((x2-x1)*(x1-x2)*(x1-x3))
+        # c1 = y1 - a1*x1**2 - b1*x1
+        print("matrix",np.matrix([[x1**2,x1,1],[x2**2,x2,1],[x3**2,x3,1]]).T,"y:",[y1,y2,y3])
+        abc = np.dot(np.matrix([y1,y2,y3]) , np.matrix([[x1**2,x1,1],[x2**2,x2,1],[x3**2,x3,1]]).T.I)
+        
+        return np.array(abc)[0]
 if __name__ == '__main__':
     # global pub,rate,point2,pos
     rospy.sleep(3)
     planner=global_planner()
     planner.listener()
     planner.global_goal = None
+    global_goal = None
     planner.if_map_pub = 1
     # convert.vel=None
     planner.pos=None
@@ -285,12 +295,12 @@ if __name__ == '__main__':
             px,py,pz=planner.parse_local_position(planner.pos)
             if planner.global_goal is not None:
                 global_goal = planner.global_goal
-            else:
-                global_goal = np.array([px,py,1])
+            # else:
+            #     global_goal = np.array([px,py,1])
             map_reso=planner.map_reso
             mapu = planner.remove_zero_rowscols(planner.map ,px,py)
 #            print("removed empty,mapu",mapu)
-        if (mapu is not 0) and (planner.pos is not None) and (planner.map_reso is not None) and (planner.map_c1>2*ifa) and (planner.map_o is not None):#and (convert.vel is not None)
+        if (mapu is not 0) and (global_goal is not None) and (planner.pos is not None) and (planner.map_reso is not None) and (planner.map_c1>2*ifa) and (planner.map_o is not None):#and (convert.vel is not None)
 #            px,py,pz=planner.parse_local_position(planner.pos)
 
 #            map_reso=planner.map_reso
@@ -424,21 +434,38 @@ if __name__ == '__main__':
                     # path3 = np.r_[path3,[global_goal[0:2]]]
                     # print('path3',path3)
                     path3=np.c_[path3,np.zeros([len(path3),1])]
+                    path4 = path3.copy()
                     ang_wp=0
-                    # if len(path2)>2:
-                    #     map_wp=(path2[1]+path2[2])/2
-                    # else:
-                    #     map_wp=path2[-1]
-                    # wp=map_wp*map_reso+map_o
-                    for k in range(1,len(path2)):
+        
+                    # for k in range(1,len(path2)):
                         
-                        map_wp=path2[k]
-                        if abs(math.atan2((path2[-1]-map_start)[0],(path2[-1]-map_start)[1])-math.atan2((map_wp-map_start)[0],(map_wp-map_start)[1]))<=ang_wp and np.linalg.norm(map_wp-(map_start))>2:
-                            map_wp=path2[k-1]
-                            wp=map_wp*map_reso+map_o
-                            break
-                        ang_wp=abs(math.atan2((path2[-1]-map_start)[0],(path2[-1]-map_start)[1])-math.atan2((map_wp-map_start)[0],(map_wp-map_start)[1]))
-                    print("ang_wp",ang_wp)
+                    #     map_wp=path2[k]
+                    #     if abs(math.atan2((path2[-1]-map_start)[0],(path2[-1]-map_start)[1])-math.atan2((map_wp-map_start)[0],(map_wp-map_start)[1]))<=ang_wp and np.linalg.norm(map_wp-(map_start))>2:
+                    #         map_wp=path2[k-1]
+                    #         wp=map_wp*map_reso+map_o
+                    #         break
+                    #     ang_wp=abs(math.atan2((path2[-1]-map_start)[0],(path2[-1]-map_start)[1])-math.atan2((map_wp-map_start)[0],(map_wp-map_start)[1]))
+                    # print("ang_wp",ang_wp)
+                    del_path = []
+                    if len(path4) >2:
+                        for ii in range(1,len(path3)):
+                            if np.linalg.norm(path3[ii]-np.array([px,py,pz])) < 1.5:
+                                del_path.append(ii)
+                        path4 = np.delete(path3, del_path ,axis =0)
+                    # if len(path4) >2:
+                    #     try:
+                    #         poly_abc = planner.poly(path4[0,0],path4[0,1],path4[1,0],path4[1,1],path4[2,0],path4[2,1])
+                    #         print(poly_abc)
+                    #         div = 2*poly_abc[0]* path4[0,0] + poly_abc[1]
+                    #         d_wp = np.array([math.sin(math.atan(abs(div))),np.sign(path4[1,0] - path4[0,0]) * div *math.sin(math.atan(abs(div)))])
+                    #         wp = path3[0,0:2] + d_wp
+                    #     except:
+                    #         wp = path3[-1,0:2]
+                    if len(path4) >2:
+                        wp = (path4[1]*0.5 + path4[2]*1.5)/2
+                        
+                    else:
+                        wp = global_goal
                     if wp is None:
                         wp = global_goal
                     uav2next_wp=np.linalg.norm(wp[0:2]-np.array([px,py]))
@@ -447,13 +474,13 @@ if __name__ == '__main__':
                         print("end point is occupied, ")
                         wp = np.array([px,py,pz])
                         global_goal = wp
-                    elif (len(path2)>2 and (uav2next_wp>dis_wp_tre or (ang_wp>ang_wp_tre and ang_wp<math.pi*0.5))):  #remove the useless points 
-                        print('wp not global goal:',wp)
-                        # wp=map_wp*map_reso+map_o
-                        # if not(len(path2)>2 and np.linalg.norm(wp-np.array([px,py]))<1):
-                        #     break
-                    else:
-                        wp=global_goal
+                    # elif (len(path2)>2 and (uav2next_wp>dis_wp_tre or (uav2next_wp>0.5*dis_wp_tre and ang_wp>ang_wp_tre))):  #remove the useless points 
+                    #     print('wp not global goal:',wp)
+                    #     # wp=map_wp*map_reso+map_o
+                    #     # if not(len(path2)>2 and np.linalg.norm(wp-np.array([px,py]))<1):
+                    #     #     break
+                    # else:
+                    #     wp=global_goal
             # wp=global_goal
          # if np.linalg.norm(global_goal[0:2]-np.array([px,py]))<0.5:
             #     ii+=1
@@ -473,19 +500,20 @@ if __name__ == '__main__':
                 px,py,pz=planner.parse_local_position(planner.pos)
                 if planner.global_goal is not None:
                     global_goal = planner.global_goal
-                else:
-                    global_goal = np.array([px,py,1])
+                # else:
+                #     global_goal = np.array([px,py,1])
                 # if np.linalg.norm(global_goal[0:2]-np.array([px,py]))<0.5:
                 #     ii+=1
                 # if ii==len(global_goal_list):
                 #     pointw.z=0
                 # else:
                 #     pointw.z=global_goal[2]
-                wp=global_goal
-                if np.linalg.norm(global_goal[0:2]-np.array([px,py]))<0.5:
-                    pointw.z=0
-                else:
-                    pointw.z = 1
+                if global_goal is not None:
+                    wp=global_goal
+                    if np.linalg.norm(global_goal[0:2]-np.array([px,py]))<0.5:
+                        pointw.z=0
+                    else:
+                        pointw.z = 1
         protime=time.clock()-starttime1
         # rospy.sleep(0.05)
         if wp is not None :
@@ -534,5 +562,5 @@ if __name__ == '__main__':
             im = Image.fromarray(np.uint8(mapsave)).convert('RGB')
             fname="/home/"+ getpass.getuser() +"/catkin_ws/src/fuxi-planner/maps/"+'%.2f'%map_o[0]+'%.2f'%map_o[1]+"_out.png"
             im.save(fname)
-        print('next goal:',pointw)
+        print('next goal:',pointw,wp,global_goal)
         print('global_planner protime:',protime)

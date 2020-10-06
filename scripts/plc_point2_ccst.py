@@ -223,6 +223,8 @@ if __name__ == '__main__':
     pre_ct=0
     c_dyn1=[]
     convert.ang_vel=[0,0,0]
+    convert.line_vel = np.array([0,0,0])
+    local_pos = None
     while not rospy.is_shutdown():
         starttime1 = time.clock()
         plc1=[]
@@ -370,7 +372,7 @@ if __name__ == '__main__':
                                     
 
             
-            if len(plc1)>0:
+            if len(plc1)>0 and local_pos is not None:
                 plc1=plc1-local_pos
                 # if len(plc_h)>2:
                 #     back_num=min(10,len(plc_h))
@@ -409,7 +411,7 @@ if __name__ == '__main__':
 #            if point_sta is not None:
 #                # print(point2)
 #                convert.pub.publish(point_sta)
-        if convert.pos is not None and (convert.octo_plc is not None) :
+        if convert.pos is not None and (convert.octo_plc is not None) and convert.line_vel is not None:
             
             octo_plc1=[]
             octo_plc=np.array(convert.octo_plc)
