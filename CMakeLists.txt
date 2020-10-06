@@ -123,7 +123,7 @@ include_directories(
 # include
   ${catkin_INCLUDE_DIRS}
 )
-add_executable(vo_republish_re
+add_executable(vo_republish_rec
     src/vo_repub_rec.cpp)
 target_link_libraries(vo_republish_rec
     ${catkin_LIBRARIES})
