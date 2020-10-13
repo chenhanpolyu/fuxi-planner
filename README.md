@@ -4,6 +4,7 @@ It is a global computational efficient path planner for UAVs, now it can work pe
 ### Pre-request package
 ````
 pip install -U scikit-learn
+pip install pymavlink
 ````
 cd /fuxi-planner/launch
 
