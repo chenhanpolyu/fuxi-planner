@@ -456,11 +456,18 @@ class UAVController(object):
         #     yaw_goal = self.glb_goal_3d
         # else:
         #     yaw_goal = self.goal
-        if self.d3_check is not None:
+        if self.d3_check is not None and len(self.d3_check):
             yaw_goal = self.d3_check[-1]
         else:
             yaw_goal = self.global_goal
-        yaw=math.atan2(yaw_goal[1]-ry,yaw_goal[0]-rx)
+        yaw_glb = math.atan2(yaw_goal[1]-ry,yaw_goal[0]-rx)
+        yaw_loc = math.atan2(self.goal[1]-ry,self.goal[0]-rx)
+        if abs(yaw_glb-yaw_loc)>math.pi:
+            yaw_loc=(2*math.pi-abs(yaw_loc))*np.sign(-yaw_loc)
+        if abs(yaw_glb - yaw_loc) > math.pi/3:
+            yaw = (yaw_glb*1.5 +yaw_loc*0.5)/2
+        else:
+            yaw = yaw_glb
         if abs(yaw-y)>math.pi:
             yaw=(2*math.pi-abs(yaw))*np.sign(-yaw)
 #        if abs(yaw-y)>math.pi/10:
@@ -486,7 +493,14 @@ class UAVController(object):
             while abs(yaw-y)>math.pi/2:
             #for i in range(10):
                 rx,ry,rz,r,p,y=self.parse_local_position("e")
-                yaw=math.atan2(yaw_goal[1]-ry,yaw_goal[0]-rx)
+                yaw_glb = math.atan2(yaw_goal[1]-ry,yaw_goal[0]-rx)
+                yaw_loc = math.atan2(self.goal[1]-ry,self.goal[0]-rx)
+                if abs(yaw_glb-yaw_loc)>math.pi:
+                    yaw_loc=(2*math.pi-abs(yaw_loc))*np.sign(-yaw_loc)
+                if abs(yaw_glb - yaw_loc) > math.pi/3:
+                    yaw = (yaw_glb*1.5 +yaw_loc*0.5)/2
+                else:
+                    yaw = yaw_glb
                 if abs(yaw-y)>math.pi:
                     yaw=(2*math.pi-abs(yaw))*np.sign(-yaw)
                 self.set_local_position(rx,ry,1.5,y+(yaw-y)*0.2)

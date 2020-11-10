@@ -49,11 +49,11 @@ class control_method():
         self.dd = int(self.uav_r/self.map_reso)+1
         self.plc_distance=3
         self.pred_coe = 0.5
-        self.upb=4
+        self.upb=5
         self.downb=0.5
         self.vel_coe = 0.7
         self.iter=0
-        self.p_num=50  #max number of points for collision check
+        self.p_num=60  #max number of points for collision check
         self.acc_CD=2  #parameter of acceleration expanding coefficient for avoiding moving obstacle
         self.wps=[]
         self.dmin=[]
@@ -328,6 +328,7 @@ class control_method():
             detect_rg = 1*np.linalg.norm(d3_check[2,0:2]-local_pos[0:2])    # for a better look
         else:
             detect_rg = np.linalg.norm(d3_check[1,0:2]-local_pos[0:2])
+        detect_rg = max(3,detect_rg)
         print("3d goal search radius",detect_rg)
         g_goal = d3_check[-1]-local_pos
         f_goal = d3_check[0]-local_pos
@@ -595,16 +596,16 @@ max(min(ae[2],self.max_accel-0.2),-self.max_accel+0.2),pred_dt])
         print("current velocity:",state[3:6])
         # if res.x[3] < 0:
         #     res.x[0:3] = -res.x[0:3]
-        if vz+res.x[2]*res.x[3] > 1.5 and res.x[3] > 0:
-            res.x[2] = (1.5 - vz)/res.x[3]
-        elif vz+res.x[2]*res.x[3] < -0.8 and res.x[3] > 0:
-            res.x[2] = (-0.8 - vz)/res.x[3]
+        if vz+res.x[2]*res.x[3] > 3 and res.x[3] > 0:
+            res.x[2] = (3 - vz)/res.x[3]
+        elif vz+res.x[2]*res.x[3] < -2 and res.x[3] > 0:
+            res.x[2] = (-2 - vz)/res.x[3]
         # elif np.linalg.norm(np.array([vx,vy,vz])+res.x[0:3]*res.x[3]) > self.max_speed:
         #     res.x[0:3] = res.x[0:3]/np.linalg.norm(res.x[0:3])*(self.max_speed - np.linalg.norm(np.array([vx,vy,vz])))/res.x[3]
         # elif np.linalg.norm(res.x[0:3]) > self.max_accel:
         #     res.x[0:3] = res.x[0:3]/np.linalg.norm(res.x[0:3])*self.max_accel
         if state[2]-self.downb<0.1 and res.x[3] >0:
-            res.x[2] = 6
+            res.x[2] = 5
         if state[2]-self.upb>-1 and res.x[3] >0:
             res.x[2] = -0.7
         print('set velocity:',[vx+res.x[0]*res.x[3]*self.vel_coe,vy+res.x[1]*res.x[3]*self.vel_coe,vz+res.x[2]*res.x[3]*self.vel_coe])
@@ -1011,9 +1012,9 @@ max(min(ae[2],self.max_accel-0.2),-self.max_accel+0.2),pred_dt])
             plc=plc-local_pos
             # plc=plc[::2]
             
-            if len(plc)>self.p_num*0.6:
+            if len(plc)>self.p_num*0.8:
                 
-                plc_1=plc[int(self.p_num*1/2)::3]
+                plc_1=plc[int(self.p_num*1/2)::2]
                 plc=np.r_[plc[0:int(self.p_num*1/2)],plc_1]
                 plc=control_method.distance_filter(self,plc,f_angle,loc_goal)
             plc_map = plc.copy()
@@ -1061,16 +1062,20 @@ max(min(ae[2],self.max_accel-0.2),-self.max_accel+0.2),pred_dt])
         #     self.max_speed=self.min_speed
         self.uav_r=self.uav_r + np.linalg.norm(self.velocity)*0.03
         control=np.array([0, 0, 0, 1])
-        if len(plcall)>0 and len(plc_map)>5:
+        if len(plcall) and len(plc_map):
            
             if np.linalg.norm(plcall[0]) > np.linalg.norm(plc_map[0]):
-                plcall=np.r_[plc_map[0:5],plcall]
-        # elif len(plcall)>0:
-        #     plc=plcall
+                plcall=np.r_[plc_map[0:min(20,len(plc_map))],plcall]
+            else:
+                plcall=np.r_[plc_map[0:min(10,len(plc_map))],plcall]
+                
+        elif len(plc_map):
+            plcall=plc_map
         # elif len(plc)==0:    #only for dynobs rviz simulation
         #     plc=np.array([[100,100,1]])
         # time.time()-d3_time_real>1
-        if len(plc_map) and (len(loc_goal_3d) == 0 or np.linalg.norm(self.local_pos-d3_pos_real)>1):  #np.linalg.norm(loc_goal_3d)< 0.4):#
+        #or np.linalg.norm(self.local_pos-d3_pos_real)>1
+        if len(plc_map) and (len(loc_goal_3d) == 0):  #np.linalg.norm(loc_goal_3d)< 0.4):#
             d3_time = time.time()
             # loc_goal_3d = control_method.check_goal(self,local_pos,plc_map,d3_check,loc_goal)
             self.if_d3_goal = 0
