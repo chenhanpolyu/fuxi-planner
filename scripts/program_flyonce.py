@@ -241,68 +241,91 @@ class Program1(UAVController):
         time_interval = 0.05
         
         if len(self.goal) > 0:
-	    if self.global_goal is not None and self.ifend == 0:
-            	px, py, pz = self.global_goal
-	    else:
-		px, py, pz = self.goal
+            if self.global_goal is not None and self.ifend == 0:
+                px, py, pz = self.global_goal
+            else:
+                px, py, pz = self.goal
             # p_gate = self.gate_info["x"], self.gate_info["y"], self.gate_info["z"]
             # q_gate = self.gate_info["qx"], self.gate_info["qy"], self.gate_info["qz"], self.gate_info["qw"]
-            ux, uy, uz, uR, uP, uY = self.parse_local_position("e")
-            vx,vy,vz,_,_,_=self.parse_velocity()
-            if self.velo_goal !=[]:
-                self.publish_locwp(np.linalg.norm([vx,vy,vz]))
+        ux, uy, uz, uR, uP, uY = self.parse_local_position("e")
+        vx,vy,vz,_,_,_=self.parse_velocity()
+        if self.velo_goal !=[]:
+            self.publish_locwp(np.linalg.norm([vx,vy,vz]))
 
-            self.f2.write(' ,'.join([str(x) for x in [ux,uy,uz]])+" ,"+' ,'.join([str(x) for x in [vx,vy,vz]])+" ,"+' ,'.join([str(x) for x in [uR,uP,uY]])+" ,"+str(time.time())+"\n")
-            print('ifend',self.ifend)
-            pos_uav = np.array([ux, uy, uz])
-            if self.ifend==0 :#and np.linalg.norm(np.array([px, py, pz])- pos_uav)> 0.3:
+        self.f2.write(' ,'.join([str(x) for x in [ux,uy,uz]])+" ,"+' ,'.join([str(x) for x in [vx,vy,vz]])+" ,"+' ,'.join([str(x) for x in [uR,uP,uY]])+" ,"+str(time.time())+"\n")
+        print('ifend',self.ifend)
+        pos_uav = np.array([ux, uy, uz])
+        if self.ifend==0 :#and np.linalg.norm(np.array([px, py, pz])- pos_uav)> 0.3:
+            
+            # self.traj = self.plan(pos_uav)
+            if time.time()-self.time_pub>1:
+                self.publish_path(self.path_rec[::int(len(self.path_rec)/100)+1])
+                self.time_pub=time.time()
+            # dir_v = self.get_dir(self.traj, 1)  # the drone's speed
+            self.my_state_mach = 1
+
+            # if False:#np.linalg.norm(pos_uav - self.goal) < 0.01:
+            #     px, py, pz = self.goal
+            #     self.set_local_position(px, py, pz,uY)
+            #     self.tick = 0
                 
-                # self.traj = self.plan(pos_uav)
-                if time.time()-self.time_pub>1:
-                    self.publish_path(self.path_rec[::int(len(self.path_rec)/100)+1])
-                    self.time_pub=time.time()
-                # dir_v = self.get_dir(self.traj, 1)  # the drone's speed
-                self.my_state_mach = 1
+            #     self.my_state_mach = 1
 
-                # if False:#np.linalg.norm(pos_uav - self.goal) < 0.01:
-                #     px, py, pz = self.goal
-                #     self.set_local_position(px, py, pz,uY)
-                #     self.tick = 0
-                    
-                #     self.my_state_mach = 1
+            # else:
+            # if self.vel is not None:
+            #     self.pos_setvel_pub.publish(self.vel)
+            self.tick=0
+            self.set_velocity()
 
-                # else:
-                # if self.vel is not None:
-                #     self.pos_setvel_pub.publish(self.vel)
-                self.tick=0
-                self.set_velocity()
+        elif np.linalg.norm(np.array([px, py])- pos_uav[0:2])< 0.6:
+            # px, py, pz = self.goal
+            if self.tick==0:
+                print('goal reached, fly to: %s , cross time remained: %s' %([px, py, pz],self.cross_times-1))
+                self.cross_times -= 1
+            # if abs(uz-pz)<0.2:
+            #     self.set_local_position(px, py, 0.3,0)
+            # else:
+            #     self.set_local_position(px, py, pz,0)#uY)
+            # self.set_local_position(0,0,1.5,0)
+            print("publish position command",self.tick)
+            self.set_local_position(px, py, pz,uY)
+            self.tick += 1
+            
+            
+            if self.tick > 200.0 * self.ros_rate:
+                if self.cross_times > 0:
+                    self.user_control_reset()
+                else:
+                    return True
+                rospy.loginfo("control reset!")
 
-            elif np.linalg.norm(np.array([px, py, pz])- pos_uav)< 0.6:
-                # px, py, pz = self.goal
-                if self.tick==0:
-                    print('goal reached, fly to: %s , cross time remained: %s' %([px, py, pz],self.cross_times-1))
-                    self.cross_times -= 1
-                # if abs(uz-pz)<0.2:
-                #     self.set_local_position(px, py, 0.3,0)
-                # else:
-                #     self.set_local_position(px, py, pz,0)#uY)
-                # self.set_local_position(0,0,1.5,0)
-                print("publish position command",self.tick)
-                self.set_local_position(px, py, pz,uY)
-                self.tick += 1
-                
-                
-                if self.tick > 200.0 * self.ros_rate:
-                    if self.cross_times > 0:
-                        self.user_control_reset()
-                    else:
-                        return True
-                    rospy.loginfo("control reset!")
+            # rospy.loginfo_throttle(0.2,self.parse_local_position())
 
-                # rospy.loginfo_throttle(0.2,self.parse_local_position())
+            rospy.sleep(1.0 / self.ros_rate)
+        else:
+            if self.tick==0:
+                print("end point is occupied, howering")
+                self.cross_times -= 1
+            # if abs(uz-pz)<0.2:
+            #     self.set_local_position(px, py, 0.3,0)
+            # else:
+            #     self.set_local_position(px, py, pz,0)#uY)
+            # self.set_local_position(0,0,1.5,0)
+            print("publish position command",self.tick)
+            self.set_local_position(ux, uy, uz,uY)
+            self.tick += 1
+            
+            
+            if self.tick > 200.0 * self.ros_rate:
+                if self.cross_times > 0:
+                    self.user_control_reset()
+                else:
+                    return True
+                rospy.loginfo("control reset!")
 
-                rospy.sleep(1.0 / self.ros_rate)
+            # rospy.loginfo_throttle(0.2,self.parse_local_position())
 
+            rospy.sleep(1.0 / self.ros_rate)
     def user_control_reset(self):
         rospy.loginfo("user program reset!")
         self.my_state_mach = 0

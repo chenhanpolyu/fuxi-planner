@@ -24,10 +24,10 @@ class control_method():
     @staticmethod
     def init(self):
         # robot parameter
-        self.max_speed = 1.0  # [m/s]  # max speed
+        self.max_speed = 1.8  # [m/s]  # max speed
         # self.min_speed = -0.5  # [m/s]  # min speed
         self.m_speed = self.max_speed  # [m/s]  # max speed
-        self.min_speed = 0.8  # [m/s]  # min speed
+        self.min_speed = 1.5  # [m/s]  # min speed
 #        self.max_accel = self.max_speed*0.5  # [m/ss]  # max accelerate
         self.max_accel = 1.2
         self.dt = 0.02  # [s]  # simulation period
@@ -37,8 +37,8 @@ class control_method():
         self.to_goal_cost_gain = 6.0  # goal_cost_gain
         self.to_obs_cost_gain = 0.0  # obs_cost_gain
         self.speed_cost_gain = 15     # speed_cost_gain
-        self.uav_r = 0.6  # [m]  # uav safe radius ,0.45 for static
-        self.detect_l = 3.5 # [m]  # detectsion radius
+        self.uav_r = 0.5  # [m]  # uav safe radius ,0.45 for static
+        self.detect_l = 3.0 # [m]  # detectsion radius
         self.det_ang = pi/16
         self.map_reso = 0.2 # [m]  # map resolution
         self.startpoint=np.array([3.0,3.0,0.0])    # start point
@@ -53,7 +53,7 @@ class control_method():
         self.downb=0.5
         self.vel_coe = 0.7
         self.iter=0
-        self.p_num=70  #max number of points for collision check
+        self.p_num=50  #max number of points for collision check
         self.acc_CD=2  #parameter of acceleration expanding coefficient for avoiding moving obstacle
         self.wps=[]
         self.dmin=[]
@@ -62,6 +62,7 @@ class control_method():
         self.r_dyn=[]
         self.obs_v=0  #if we change the velocity for dynamic obs
         self.no_path=0
+        # self.if_d3_goal = 0
     @staticmethod
     def Angle( x,  y):
         angle = 0.0;
@@ -88,7 +89,8 @@ class control_method():
         wps=[]
         angle_locgoal=np.array([self.Angle(loc_goal[0:2],[1,0]),self.Angle([np.linalg.norm(loc_goal[0:2]),loc_goal[2]],[1,0])])
         angle_vel=np.array([self.Angle(state[3:5],[1,0]),self.Angle([np.linalg.norm(state[3:5]),state[5]],[1,0])])
-#        angle_vel=[self.Angle(state[3:5],[1,0]),self.Angle([np.linalg.norm(state[3:5]),state[5]],[1,0])]
+        max_det_ang = asin(min(self.max_accel/np.linalg.norm(self.velocity),1))#
+        angle_vel=[self.Angle(state[3:5],[1,0]),self.Angle([np.linalg.norm(state[3:5]),state[5]],[1,0])]
 #        angle_locgoal=[(angle_locgoal[0]+0.3*angle_vel[0])/1.3,(angle_locgoal[1]+0.3*angle_vel[1])/1.3]
         # if np.linalg.norm(loc_goal)<self.detect_l*self.predict_coe:
         #     self.detect_l=max(np.linalg.norm(loc_goal)/self.predict_coe,1)
@@ -100,14 +102,22 @@ class control_method():
 
             last_if_direct = self.if_direct
             self.if_direct = self.d_obstacle(self,circle_p,plc,0,no_path_last,loc_goal_old)<self.uav_r
-            if not self.if_direct:
-                loc_goal = circle_p
-                f_angle = angle_locgoal
+            if (not self.if_direct):
+                if (abs(angle_locgoal[0]-f_angle[0])<max_det_ang or self.pp_restart==1 or f_angle[0]==float("Inf")):
+                    loc_goal = circle_p
+                    f_angle = angle_locgoal
+                    
+                else:
+                    loc_goal = loc_goal_old
+                    # self.if_direct = F
+                no_path=0
+                print("directly fly to local goal")
+                break
 #            if not self.if_direct:
-            if len(plc) > 0 and self.num_dyn == 0 :#and ((not self.if_direct) and (not last_if_direct)):
+            if len(plc) > 0 and self.num_dyn == 0:  #and ((not self.if_direct) and (not last_if_direct)):
 #                coe_dis_goal = min(max(min(self.detect_l,np.linalg.norm(plc[0]))/self.detect_l,0.2),0.4)
-                coe_dis_goal = 0.5
-            elif len(plc) > 0 and self.num_dyn != 0 :
+                coe_dis_goal = 0.3
+            elif len(plc) > 0 and self.num_dyn != 0:
                 coe_dis_goal = 1
             if (f_angle[0]!=float("Inf") and f_angle[1]!=float("Inf")):
                 f_angle = np.array(f_angle)
@@ -124,7 +134,7 @@ class control_method():
             #     max_det_ang = asin(min(self.max_accel/np.linalg.norm(self.velocity),0.9))
             # else:
             #     max_det_ang = pi/2*1
-            max_det_ang = asin(min(self.max_accel/np.linalg.norm(self.velocity),1))
+            
             if np.linalg.norm(loc_goal)>0.1*self.detect_l and len(plc)!=0 and self.if_direct: #np.linalg.norm(loc_goal)>0.3*self.detect_l and
                 if coe_dis_goal ==1:
                     start_ang = 2*self.det_ang
@@ -221,14 +231,164 @@ class control_method():
             f_angle[0] =0
         if f_angle[1] == float("Inf"):
             f_angle[1] =0
-        # elapsed = (time.clock() - starttime)
+        # elapsed = (time.time() - starttime)
         # print('find goal time:',elapsed)
         # if np.linalg.norm(loc_goal)>self.detect_l:
         #     print('goal is too far:',loc_goal)
         # print('f_angle:',f_angle)
         return loc_goal,f_angle,no_path
        
+    @staticmethod
+    def check_goal(self,local_pos,plc_map,d3_check,loc_goal):
+        print(d3_check)
+        if d3_check is None or (d3_check[1] == 0).all():
+            return loc_goal
+        else:
+            self.dis_p1 = np.linalg.norm(d3_check[1])
+        g_goal = d3_check[-1]-local_pos
+        f_goal = d3_check[0]-local_pos
+        angle_locgoal=np.array([self.Angle(g_goal[0:2],[1,0]),self.Angle([np.linalg.norm(g_goal[0:2]),g_goal[2]],[1,0])])
+        max_det_ang = abs(angle_locgoal[0]-self.Angle(f_goal[0:2],[1,0]))
+        if max_det_ang > pi:
+            max_det_ang = max_det_ang - pi
+        print("max angular search range for 3D goal:",max_det_ang)
+        if np.linalg.norm(loc_goal)>0.1*self.detect_l and len(plc_map)!=0: #np.linalg.norm(loc_goal)>0.3*self.detect_l and
+            # if coe_dis_goal ==1:
+            #     start_ang = 2*self.det_ang
+            # else:
+            #     start_ang = 0
+            for de_angle in np.arange(self.det_ang,max_det_ang,self.det_ang):
+                circle_p3=np.array([cos(angle_locgoal[0]+de_angle)*self.dis_p1*self.predict_coe*cos(angle_locgoal[1]),
+                                sin(angle_locgoal[0]+de_angle)*self.dis_p1*self.predict_coe*cos(angle_locgoal[1]),
+                                sin(angle_locgoal[1]-de_angle)*self.dis_p1*self.predict_coe])
+                circle_p4=np.array([cos(angle_locgoal[0]-de_angle)*self.dis_p1*self.predict_coe*cos(angle_locgoal[1]),
+                                sin(angle_locgoal[0]-de_angle)*self.dis_p1*self.predict_coe*cos(angle_locgoal[1]),
+                                sin(angle_locgoal[1]-de_angle)*self.dis_p1*self.predict_coe])
+                circle_p5=np.array([cos(angle_locgoal[0]+de_angle)*self.dis_p1*self.predict_coe*cos(angle_locgoal[1]),
+                                sin(angle_locgoal[0]+de_angle)*self.dis_p1*self.predict_coe*cos(angle_locgoal[1]),
+                                sin(angle_locgoal[1]+de_angle)*self.dis_p1*self.predict_coe])
+                circle_p6=np.array([cos(angle_locgoal[0]-de_angle)*self.dis_p1*self.predict_coe*cos(angle_locgoal[1]),
+                                sin(angle_locgoal[0]-de_angle)*self.dis_p1*self.predict_coe*cos(angle_locgoal[1]),
+                                sin(angle_locgoal[1]+de_angle)*self.dis_p1*self.predict_coe])
+                circle_p1=np.array([cos(angle_locgoal[0])*self.dis_p1*self.predict_coe*cos(angle_locgoal[1]+de_angle),
+                                sin(angle_locgoal[0])*self.dis_p1*self.predict_coe*cos(angle_locgoal[1]+de_angle),
+                                sin(angle_locgoal[1]+de_angle)*self.dis_p1*self.predict_coe])
+                circle_p2=np.array([cos(angle_locgoal[0])*self.dis_p1*self.predict_coe*cos(angle_locgoal[1]-de_angle),
+                                sin(angle_locgoal[0])*self.dis_p1*self.predict_coe*cos(angle_locgoal[1]-de_angle),
+                                sin(angle_locgoal[1]-de_angle)*self.dis_p1*self.predict_coe])
+                
+
+#                    print('check points:/n',circle_p1,circle_p2,circle_p3,circle_p4,angle_locgoal)
+                d_min1=self.d_obstacle(self,circle_p1,plc_map,1,0,0)
+                if d_min1 > self.uav_r :#and local_pos[2]<self.upb:
+                    loc_goal = circle_p1
+                    self.if_d3_goal = 1
+                    break
+
+                elif  local_pos[2]>self.downb and self.d_obstacle(self,circle_p2,plc_map,2,0,0)> self.uav_r:
+                    loc_goal = circle_p2
+                    self.if_d3_goal = 1
+                    break
+                elif  local_pos[2]>self.downb and self.d_obstacle(self,circle_p3,plc_map,3,0,0) > self.uav_r:
+                    loc_goal = circle_p3
+                    self.if_d3_goal = 1
+                    break
+                
+                elif local_pos[2]>self.downb and self.d_obstacle(self,circle_p4,plc_map,4,0,0) > self.uav_r :
+                    loc_goal = circle_p4
+                    self.if_d3_goal = 1
+                    break
+                elif self.d_obstacle(self,circle_p5,plc_map,5,0,0) > self.uav_r :
+                    loc_goal = circle_p5
+                    self.if_d3_goal = 1
+                    break
+                elif self.d_obstacle(self,circle_p6,plc_map,6,0,0) > self.uav_r :
+                    loc_goal = circle_p6
+                    self.if_d3_goal = 1
+                    break
+        return loc_goal
+    
+    @staticmethod
+    def fd_3d_goal(self,local_pos,plc,d3_check,loc_goal):
+        # angle_locgoal=np.array([self.Angle(loc_goal[0:2],[1,0]),self.Angle([np.linalg.norm(loc_goal[0:2]),loc_goal[2]],[1,0])])
+        print(d3_check)
+        
+        # circle_p=np.array([cos(angle_locgoal[0])*4*self.predict_coe*coe,
+        #     sin(angle_locgoal[0])*4*self.predict_coe*coe,
+        #     sin(angle_locgoal[1])*4*self.predict_coe*coe])
+
+        # last_if_direct = self.if_direct
+        
+        if d3_check is None or (d3_check[1] == 0).all():
+            return loc_goal
+        elif d3_check is not None and (d3_check[1] == 1).all():
+            d3_check[0,2] = 1.5
+            return d3_check[0]
+        elif (d3_check[1] == d3_check[2]).all():
+            detect_rg = 1*np.linalg.norm(d3_check[2,0:2]-local_pos[0:2])    # for a better look
+        else:
+            detect_rg = np.linalg.norm(d3_check[1,0:2]-local_pos[0:2])
+        print("3d goal search radius",detect_rg)
+        g_goal = d3_check[-1]-local_pos
+        f_goal = d3_check[0]-local_pos
+        if_direct = self.d_obstacle(self, g_goal,plc,0,0,0)>self.uav_r
+        if if_direct:
+            print("no collision directly to goal")
+            return g_goal
+        angle_locgoal=np.array([self.Angle(g_goal[0:2],[1,0]),self.Angle([np.linalg.norm(g_goal[0:2]),g_goal[2]],[1,0])])
+        max_det_ang = abs(angle_locgoal[0]-self.Angle(f_goal[0:2],[1,0]))
+        if max_det_ang > pi:
+            max_det_ang = 2*pi - max_det_ang
+        print("max angular search range for 3D goal:",max_det_ang)
+        if max_det_ang < 2*self.det_ang:
+            return loc_goal
+        ang_pix = []
+        for pt in plc:
+            angle_pt=np.array([self.Angle(pt[0:2],[1,0]),self.Angle([np.linalg.norm(pt[0:2]),pt[2]],[1,0])])
+            ang_dif = angle_pt - angle_locgoal
+            if np.linalg.norm(ang_dif) < abs(max_det_ang)-2.0*self.det_ang and abs(angle_pt[1])>self.det_ang:  # (abs(ang_dif) < pi/2).all() and 
+                ang_pix.append(np.rint(ang_dif/self.det_ang))
+        if not len(ang_pix):
+            return loc_goal
+        ang_pix = np.array(ang_pix)
+        uniq_ang = np.unique(ang_pix[:,0])
+        ang_edge = []
+        for ua in uniq_ang:
+            ls_ua = np.unique(ang_pix[np.where(ang_pix[:,0] == ua)][:,1])
+            print("las_ua",ls_ua)
+            min_lsua = min(ls_ua)
+            max_lsua = max(ls_ua)
+            if (local_pos[2]>self.downb or min_lsua>0) and not(min_lsua>0 and max_lsua>0):
+                ang_edge.append([ua,min_lsua])
+            if (local_pos[2]>self.downb or max_lsua>0) and (max_lsua != min_lsua or (min_lsua>0 and max_lsua>0)):
+                ang_edge.append([ua,max_lsua])
             
+            if len(ls_ua)>2:
+                ls_ua = np.sort(ls_ua)
+                ls_ua_cut = ls_ua[1:-1]
+                ls_ua_edge = ls_ua_cut[(ls_ua[1:-1]-ls_ua[2::])!=-1]
+                for ue in ls_ua_edge:
+                    ang_edge.append([ua,ue])
+        # ang_pix = ang_pix[ang_pix[:,0].argsort()]
+        print("ang_edge:",ang_edge)
+        ang_goal = np.array(ang_edge[np.argmin(np.linalg.norm(np.array(ang_edge),axis=1))])
+        print("ang_goal",ang_goal)
+        if not ang_goal + np.array([0,1]) in uniq_ang:
+            ang_goal = (ang_goal + 1.5*np.array([0,1]))*self.det_ang
+        elif not ang_goal + np.array([1,0]) in uniq_ang:
+            ang_goal = (ang_goal + 1.5*np.array([1,0]))*self.det_ang
+        elif not ang_goal + np.array([0,-1]) in uniq_ang:
+            ang_goal = (ang_goal + 1.5*np.array([0,-1]))*self.det_ang
+        else:
+            ang_goal = (ang_goal + 1.5*np.array([-1,0]))*self.det_ang
+        if np.linalg.norm(ang_goal) > max_det_ang:
+            return loc_goal
+        ang_goal = ang_goal + angle_locgoal
+        d3_goal = np.array([detect_rg*cos(ang_goal[0])*self.predict_coe*cos(ang_goal[1]),
+                            detect_rg*sin(ang_goal[0])*self.predict_coe*cos(ang_goal[1]),
+                            detect_rg*sin(ang_goal[1])*self.predict_coe])
+        self.if_d3_goal = 1
+        return d3_goal
     def if_edge(use_map,i,j):
         if_ed=(use_map[i-1][j]==1 or use_map[i+1][j]==1 or use_map[i][j-1]==1 or use_map[i][j+1]==1)
         return if_ed
@@ -357,7 +517,7 @@ class control_method():
         # else:
         #     back_num=0
         # loc_goal = np.matmul(b2e, loc_goal)
-        starttime = time.clock()
+        starttime = time.time()
         control_gain=self.control_gain
         speed_cost_gain=self.speed_cost_gain
         if self.obs_v==1:
@@ -385,20 +545,27 @@ max(min(ae[2],self.max_accel-0.2),-self.max_accel+0.2),pred_dt])
                 self.max_speed = self.min_speed + 0.1
             para_g = 0.1
             # para_g=np.linalg.norm(state[3:6])*pred_dt/d_goal
+            tg = para_g*loc_goal
             ve=np.linalg.norm(state[3:6])*loc_goal/d_goal
             ae=(ve-state[3:6])/(d_goal*para_g/np.linalg.norm(state[3:6])*self.vel_coe) #pred_dt 
-            x0=np.array([max(min(ae[0],self.max_accel-0.2),-self.max_accel+0.2),max(min(ae[1],self.max_accel-0.2),-self.max_accel+0.2),
-max(min(ae[2],self.max_accel-0.2),-self.max_accel+0.2),d_goal*para_g/np.linalg.norm(state[3:6])])
+            x0=np.array([max(min(ae[0],self.max_accel-0.2),-self.max_accel+0.2),max(min(ae[1],self.max_accel-0.2),-self.max_accel+0.2),\
+                         max(min(ae[2],self.max_accel-0.2),-self.max_accel+0.2),d_goal*para_g/np.linalg.norm(state[3:6])])
             # pp_d1 = np.linalg.norm(np.cross(traj_end,loc_goal*para_g))/np.linalg.norm(loc_goal*para_g)*para_d
             bons = ((-self.max_accel, self.max_accel), (-self.max_accel, self.max_accel), (-self.max_accel, self.max_accel), (d_goal*para_g/self.max_speed,3 ))
             cons = (# {'type': 'ineq', 'fun': lambda x: -np.linalg.norm(x[0:3])+self.max_accel},\
-                    {'type': 'ineq', 'fun': lambda x: -np.linalg.norm([vx+x[0]*x[3],vy+x[1]*x[3],vz+x[2]*x[3]])+self.max_speed},\
+                    {'type': 'ineq', 'fun': lambda x: -np.linalg.norm([vx+x[0]*x[3],vy+x[1]*x[3],vz+x[2]*x[3]])+self.max_speed,
+                     'jac' : lambda x: np.array([2*x[3]*(vx+x[0]*x[3]),2*x[3]*(vy+x[1]*x[3]),2*x[3]*(vz+x[2]*x[3]),\
+                                                 2*(x[3]*(x[0]**2+x[1]**2+x[2]**2)+x[0]*vx+x[1]*vy+x[2]*vz)])/(-2*np.linalg.norm([vx+x[0]*x[3],vy+x[1]*x[3],vz+x[2]*x[3]]))},\
                     # {'type': 'ineq', 'fun': lambda x: np.linalg.norm([vx+x[0]*x[3],vy+x[1]*x[3],vz+x[2]*x[3]])-self.min_speed},\
-                    {'type': 'eq', 'fun': lambda x: np.linalg.norm((np.array([vx,vy,vz])+x[0:3]*x[3]/2)*x[3] - para_g*loc_goal)})
+                    {'type': 'eq', 'fun': lambda x: np.linalg.norm((np.array([vx,vy,vz])+x[0:3]*x[3]/2)*x[3] - tg),
+                     'jac' : lambda x: np.array([(vx*x[3]+0.5*x[0]*x[3]**2-tg[0])*x[3]**2,(vy*x[3]+0.5*x[1]*x[3]**2-tg[1])*x[3]**2,\
+                                                 (vz*x[3]+0.5*x[2]*x[3]**2-tg[2])*x[3]**2,\
+                                                     2*((vx*x[3]+0.5*x[0]*x[3]**2-tg[0])*(vx+x[0]*x[3])+(vy*x[3]+0.5*x[1]*x[3]**2-tg[1])*(vy+x[1]*x[3])+\
+                                                        (vz*x[3]+0.5*x[2]*x[3]**2-tg[2])*(vz+x[2]*x[3]))])/(2*np.linalg.norm((np.array([vx,vy,vz])+x[0:3]*x[3]/2)*x[3] - tg))})
                     # {'type': 'eq', 'fun': lambda x: np.linalg.norm(np.cross((np.array([vx,vy,vz])+x[0:3]*x[3]/2)*x[3],loc_goal*para_g))/(d_goal*para_g)})
                     # {'type': 'ineq', 'fun': lambda x: -x[3]+3}) #loc_goal is the Increment for position
-            res = minimize(self.fun, x0, args=(px,py,pz,vx,vy,vz,ax,ay,az,obstacle,dt,loc_goal,control_gain,speed_cost_gain,para_g),method='SLSQP',
-                       options={'maxiter':20},constraints=cons,bounds = bons, tol = 3e-2)
+            res = minimize(self.fun, x0, args=(px,py,pz,vx,vy,vz,ax,ay,az,obstacle,dt,loc_goal,control_gain,speed_cost_gain,para_g),method='SLSQP',\
+                       jac=self.jac,options={'maxiter':10},constraints=cons,bounds = bons, tol = 5e-2)
             # traj_end = ((np.array([vx,vy,vz])+res.x[0:3]*res.x[3]/2)*res.x[3])
             # pp_d = np.linalg.norm(np.cross(traj_end,loc_goal*para_g))/np.linalg.norm(loc_goal*para_g)
             if res.x[3] > 0:
@@ -419,7 +586,7 @@ max(min(ae[2],self.max_accel-0.2),-self.max_accel+0.2),d_goal*para_g/np.linalg.n
             #            options={'maxiter':20},constraints=cons, tol = 0.003)
             #     traj_dif = np.linalg.norm(((state[3:6]+res.x[0:3]*res.x[3]/2)*res.x[3]) - para_g*loc_goal)
             print("static traj end difference",traj_dif,res.status,res.success,res.nit)
-        opttime = (time.clock() - starttime)
+        opttime = (time.time() - starttime)
         
         print("Optimize Time used:",opttime)
         
@@ -443,6 +610,19 @@ max(min(ae[2],self.max_accel-0.2),-self.max_accel+0.2),d_goal*para_g/np.linalg.n
         print('set velocity:',[vx+res.x[0]*res.x[3]*self.vel_coe,vy+res.x[1]*res.x[3]*self.vel_coe,vz+res.x[2]*res.x[3]*self.vel_coe])
         set_vel = [vx+res.x[0]*res.x[3]*self.vel_coe,vy+res.x[1]*res.x[3]*self.vel_coe,vz+res.x[2]*res.x[3]*self.vel_coe]
         return set_vel[0],set_vel[1],set_vel[2],traj_dif
+    
+    @staticmethod
+    def jac(x,px,py,pz,vx,vy,vz,ax,ay,az,obstacle,dt,loc_goal,control_gain,speed_cost_gain,para_g):
+        tg=para_g*loc_goal
+        jac_vt = control_gain*np.array([x[0],x[1],x[2],0])/np.linalg.norm(x[0:3]) + \
+            5*np.array([2*x[3]*(vx+x[0]*x[3]),2*x[3]*(vy+x[1]*x[3]),2*x[3]*(vz+x[2]*x[3]),\
+                                                 2*(x[3]*(x[0]**2+x[1]**2+x[2]**2)+x[0]*vx+x[1]*vy+x[2]*vz)])/(-2*np.linalg.norm([vx+x[0]*x[3],vy+x[1]*x[3],vz+x[2]*x[3]]))\
+                                                    + 5*np.array([(vx*x[3]+0.5*x[0]*x[3]**2-tg[0])*x[3]**2,(vy*x[3]+0.5*x[1]*x[3]**2-tg[1])*x[3]**2,\
+                                                 (vz*x[3]+0.5*x[2]*x[3]**2-tg[2])*x[3]**2,\
+                                                     2*((vx*x[3]+0.5*x[0]*x[3]**2-tg[0])*(vx+x[0]*x[3])+(vy*x[3]+0.5*x[1]*x[3]**2-tg[1])*(vy+x[1]*x[3])+\
+                                                        (vz*x[3]+0.5*x[2]*x[3]**2-tg[2])*(vz+x[2]*x[3]))])/(2*np.linalg.norm((np.array([vx,vy,vz])+x[0:3]*x[3]/2)*x[3] - tg))+\
+                                                        speed_cost_gain*np.array([0,0,0,x[3]])
+        return jac_vt
     @staticmethod
     def fun(x,px,py,pz,vx,vy,vz,ax,ay,az,obstacle,dt,loc_goal,control_gain,speed_cost_gain,para_g):
         # speed =np.linalg.norm(np.array([vx,vy,vz]))
@@ -486,7 +666,10 @@ max(min(ae[2],self.max_accel-0.2),-self.max_accel+0.2),d_goal*para_g/np.linalg.n
         #     print("no path found, accel increase",self.no_path)
 #        elif bb<0.3 :
 #            self.max_accel=self.max_speed+0.1
-        min_d=np.linalg.norm(obstacle[0])
+        if len(obstacle):
+            min_d=np.linalg.norm(obstacle[0])
+        else:
+            min_d =3
 #        if min_d > 3:
 #            min_d==3
         
@@ -602,7 +785,7 @@ max(min(ae[2],self.max_accel-0.2),-self.max_accel+0.2),d_goal*para_g/np.linalg.n
         # Traj=np.array([px+x[0],py+x[1]])
         if len(obstacle)==0:
             d_ob=float("inf")
-        elif no_path_last == 2 and np.linalg.norm(loc_goal_old-x) < 0.3:
+        elif no_path_last == 2 and np.linalg.norm(loc_goal_old-x) < 0.3:  # if no wp is found last step , reject wp which is too close to it.
             d_ob = 0
         elif np.linalg.norm(obstacle[0]) < self.uav_r * 0.7:
             d_ob = 0
@@ -785,15 +968,17 @@ max(min(ae[2],self.max_accel-0.2),-self.max_accel+0.2),d_goal*para_g/np.linalg.n
         return filtered_plc
     
     @classmethod
-    def start(self,plc,plcall,state,goal,r,p,y,loc_goal_old,f_angle,path_rec,pretime,dyn_time,if_direct,no_path,pp_restart,pcl_time):
+    def start(self,plc,plcall,state,goal,r,p,y,loc_goal_old,f_angle,path_rec,pretime,dyn_time,
+              if_direct,no_path,pp_restart,pcl_time,d3_check,d3_pos_real,glb_goal_3d,if_d3_goal):
         self.pp_restart = pp_restart
+        self.if_d3_goal = if_d3_goal
         if pretime==0:
             pred_dt=0
         else:
             pred_dt=time.time()-pretime
         self.pred_dt = pred_dt
         pretime=time.time()
-        starttime1 = time.clock()
+        starttime1 = time.time()
         control_method.init(self)
         e2b = earth_to_body_frame(r, p, y)
         b2e = body_to_earth_frame(r,p,y)
@@ -805,6 +990,12 @@ max(min(ae[2],self.max_accel-0.2),-self.max_accel+0.2),d_goal*para_g/np.linalg.n
         self.velocity=state[3:6]
         local_pos=state[0:3]+self.pred_coe*pred_dt*self.velocity
         self.local_pos=state[0:3]+self.pred_coe*pred_dt*self.velocity
+        if len(glb_goal_3d) ==0 or np.linalg.norm(self.local_pos-d3_pos_real)>0.5:
+            loc_goal_3d = []
+            loc_goal_pl = loc_goal
+        else:
+            loc_goal_3d = glb_goal_3d-self.local_pos
+            loc_goal_pl = loc_goal_3d
         # for i in range(len(plc)):
         #     point=np.array([plc[i][2],plc[i][0],-plc[i][1]])
         #     point=np.matmul(b2e,point)+local_pos
@@ -815,78 +1006,17 @@ max(min(ae[2],self.max_accel-0.2),-self.max_accel+0.2),d_goal*para_g/np.linalg.n
         print('num-octomap',len(plc))
         print('num-depthcam',len(plcall))
         self.if_direct = if_direct
-        # if len(plc)>0:
-        #     plc=plc[np.lexsort(plc.T)]
-        #     plc_z=np.around(np.sort(list(set(list(plc[:,2])))),decimals=2)
-        #     ze=[]
-        #     for zz in plc_z:
-        #         if (round(zz+self.map_reso,1) not in plc_z) and (zz+self.map_reso*2 not in plc_z) and (zz+self.map_reso*3 not in plc_z) and int(zz*10-plc_z[0]*10)%int(10*self.map_reso)==0:
-        #             # print(zz+self.map_reso,plc_z)
-        #             ze.append(zz)
-        #         if int(zz*10-plc_z[0]*10)%int(10*self.map_reso*2)==0 and zz-plc_z[0]>=self.map_reso*2-0.1:
-        #             ze.append(zz)
-            
-        #     ze.append(plc_z[0])
-        #     ze.append(plc_z[-1])
-        #     print(ze,plc_z)
-            
-        #     for pt in plc:
-        #         # print('got one',pt)
-        #         # if (pt[2] in ze):
-        #         if np.sort(abs(ze-pt[2]))[0]<0.01:
-        #             plc1.append(pt)
-                    
-        #     # plc2=[]
-        #     # for i in range(len(plc1)):
-        #     #     point=plc1[i]
-        #     #     plc2.append(point-local_pos)
-        #     plc=np.array(plc1)
-        #     print('plc-z num before df:',len(plc))
-            
-        #     plc1=[]
-        #     plc=plc[np.lexsort(plc.T[0:2,:])]
-        #     plc_y=np.around(np.sort(list(set(list(plc[:,1])))),decimals=2)
-        #     ye=[]
-        #     for yy in plc_y:
-        #         if (round(yy+self.map_reso,1) not in plc_y) and (yy+self.map_reso*2 not in plc_y) and (yy+self.map_reso*3 not in plc_y) and int(yy*10-plc_y[0]*10)%int(10*self.map_reso)==0:
-        #             # print(yy+self.map_reso,plc_y)
-        #             ye.append(yy)
-        #         if int(yy*10-plc_y[0]*10)%int(10*self.map_reso*2)==0 and yy-plc_y[0]>=self.map_reso*2-0.1:
-        #             ye.append(yy)
-            
-        #     ye.append(plc_y[0])
-        #     ye.append(plc_y[-1])
-        #     print(ye,plc_y)
-            
-        #     for pt in plc:
-        #         # print('got one',pt)
-        #         # if (pt[2] in ye):
-        #         if np.sort(abs(ye-pt[1]))[0]<0.01:
-        #             plc1.append(pt)
-                    
-        #     plc2=[]
-        #     print('plc num loc:',len(plc1))
-        #     for i in range(len(plc1)):
-        #         point=plc1[i]
-        #         plc2.append(point-local_pos)
-        #     # plc=np.array(plc2)
-        #     plc=list(plc2)
-        #     print('plc-y num before df:',len(plc))
-            
-        # for i in range(len(plc)):
-        #     point=plc[i]
-        #     plc1.append(point-local_pos)
-        # plc=plc1
-
+        plc_map = []
         if len(plc)>0:
             plc=plc-local_pos
-            plc=plc[::2]
+            # plc=plc[::2]
             
-            if len(plc)>self.p_num*1:
+            if len(plc)>self.p_num*0.6:
                 
-                plc_1=plc[int(self.p_num*2/3)::3]
-                plc=np.r_[plc[0:int(self.p_num*2/3)],plc_1]
+                plc_1=plc[int(self.p_num*1/2)::3]
+                plc=np.r_[plc[0:int(self.p_num*1/2)],plc_1]
                 plc=control_method.distance_filter(self,plc,f_angle,loc_goal)
+            plc_map = plc.copy()
         num_dyn=0
         if len(plcall)>0:
             if plcall[-1][0]!=0:
@@ -909,9 +1039,9 @@ max(min(ae[2],self.max_accel-0.2),-self.max_accel+0.2),d_goal*para_g/np.linalg.n
                 plcall=plcall-local_pos
                 plcall=control_method.distance_filter(self,plcall,f_angle,loc_goal)
                 
-#                if len(plcall)>self.p_num*0.8:
-#                    plcall_1=plcall[int(self.p_num/2)::2]
-#                    plcall=np.r_[plcall[0:int(self.p_num/2)],plcall_1]
+                if len(plcall)>self.p_num*0.6:
+                    plcall_1=plcall[int(self.p_num/2)::2]
+                    plcall=np.r_[plcall[0:int(self.p_num/2)],plcall_1]
         min_dis=0
         if num_dyn != 0:
             dyn_time  =pretime
@@ -922,7 +1052,7 @@ max(min(ae[2],self.max_accel-0.2),-self.max_accel+0.2),d_goal*para_g/np.linalg.n
         elif len(plcall)>3:
             min_dis=np.linalg.norm(plcall[0])
         elif len(plc)>3:
-#            min_dis=np.linalg.norm(plc[0])*(1-0.2)+self.detect_l*0.2
+#            min_dis=np.linalg.norm(plc[0])*(1-0.2)+self.dis_p1*0.2
             min_dis=np.linalg.norm(plc[0])
 # 
         # if min_dis !=0 and num_dyn ==0:
@@ -931,17 +1061,38 @@ max(min(ae[2],self.max_accel-0.2),-self.max_accel+0.2),d_goal*para_g/np.linalg.n
         #     self.max_speed=self.min_speed
         self.uav_r=self.uav_r + np.linalg.norm(self.velocity)*0.03
         control=np.array([0, 0, 0, 1])
-        if len(plcall)>0 and len(plc)>0:
-            plc=np.r_[plc,plcall]
-            if np.linalg.norm(plcall[0])<np.linalg.norm(plc[0]):
-                plc=np.r_[[plcall[0]],plc]
-        elif len(plcall)>0:
-            plc=plcall
-        elif len(plc)==0:    #only for dynobs rviz simulation
-            plc=np.array([[100,100,1]])
+        if len(plcall)>0 and len(plc_map)>5:
+           
+            if np.linalg.norm(plcall[0]) > np.linalg.norm(plc_map[0]):
+                plcall=np.r_[plc_map[0:5],plcall]
+        # elif len(plcall)>0:
+        #     plc=plcall
+        # elif len(plc)==0:    #only for dynobs rviz simulation
+        #     plc=np.array([[100,100,1]])
+        # time.time()-d3_time_real>1
+        if len(plc_map) and (len(loc_goal_3d) == 0 or np.linalg.norm(self.local_pos-d3_pos_real)>1):  #np.linalg.norm(loc_goal_3d)< 0.4):#
+            d3_time = time.time()
+            # loc_goal_3d = control_method.check_goal(self,local_pos,plc_map,d3_check,loc_goal)
+            self.if_d3_goal = 0
+            loc_goal_pl = control_method.fd_3d_goal(self,local_pos,plc_map,d3_check,loc_goal)
+            if self.if_d3_goal:
+                # d3_time_real = time.time()
+                d3_pos_real = self.local_pos.copy()
+                print("better 3d goal is found!")
+                loc_goal_3d = loc_goal_pl
+            
+            print("find 3d path time cost:",time.time()-d3_time)
+        # elif len(plc_map) ==0:
+        #     loc_goal_pl = loc_goal
+        # else:
+        #     loc_goal_3d = loc_goal
 
-        loc_goal,f_angle,no_path=control_method.get_localgoal(self,local_pos,plc,f_angle,loc_goal,loc_goal_old,path_rec,state.copy(),no_path)  # get the local goal in 2d map
-        starttime2 = time.clock()
+        if len(plcall)>0:
+            print("point number for HAS:",len(plcall))
+            loc_goal,f_angle,no_path=control_method.get_localgoal(self,local_pos,plcall,f_angle,loc_goal_pl,loc_goal_old,path_rec,state.copy(),no_path)  # get the local goal in 2d map
+        else:
+            loc_goal = loc_goal_pl
+        starttime2 = time.time()
         # control,c_goal=control_method.calculate(self,control,loc_goal,state.copy(),plc,b2e,path_rec)
         # target_state = control_method.kinematic(self,state.copy(),control)
         traj_dif = 1
@@ -954,11 +1105,16 @@ max(min(ae[2],self.max_accel-0.2),-self.max_accel+0.2),d_goal*para_g/np.linalg.n
         if traj_dif > 0.08 and num_dyn ==0:
             vx,vy,vz = control_method.calculate1(self,control,loc_goal,state.copy(),plc,b2e,path_rec,min_dis)
              #test:velocity control
-        steptime = (time.clock() - starttime1)
+        steptime = (time.time() - starttime1)
         wptime = (starttime2 - starttime1)
-        optitime = (time.clock() - starttime2)
-        print("Step Time used:",steptime)
-        return [vx,vy,vz],loc_goal,f_angle,steptime,wptime,optitime,self.iter,len(plc),dyn_time,pretime,plc+local_pos ,self.if_direct,no_path,traj_dif
+        optitime = (time.time() - starttime2)
+        print("Step Time used:",steptime,"find local goal time:",wptime)
+
+        if len(plc):
+            global_pcl = plc+local_pos
+        else:
+            global_pcl = plc
+        return [vx,vy,vz],loc_goal,f_angle,steptime,wptime,optitime,self.iter,len(plc),dyn_time,pretime,global_pcl ,self.if_direct,no_path,traj_dif,loc_goal_3d,d3_pos_real,self.if_d3_goal
 # if __name__ == '__main__':
 #     self=self()
 #     timerec,fgtime,path_rec=main()

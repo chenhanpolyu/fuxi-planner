@@ -13,6 +13,7 @@ import sklearn.cluster as skc
 from visualization_msgs.msg import Marker,MarkerArray
 import math
 from message_filters import TimeSynchronizer, Subscriber,ApproximateTimeSynchronizer
+from nav_msgs.msg import Path
 class convert_plc():
     def callback(self,data):
         #y.loginfo(rospy.get_caller_id() + "I heard %s", data.data)
@@ -51,6 +52,30 @@ class convert_plc():
         for o_p in data.points:
             self.octo_plc.append([o_p.x,o_p.y,o_p.z])
 #        print(self.octo_plc)
+    def path_callback(self,path):
+        PL=[]
+        # print("PL call:",PL)
+        for wp in path.poses:
+            PL.append([wp.pose.position.x , wp.pose.position.y , wp.pose.position.z])
+        self.path_time = path.header.stamp.secs + path.header.stamp.nsecs * 1e-9
+        ros_t = rospy.get_rostime().secs+rospy.get_rostime().nsecs*1e-9
+        print("PL call:",PL)
+        if ros_t - self.path_time > 1:  # path timeout
+            print("path time out!",ros_t - self.path_time)
+            self.dis_2th_wp = 3
+            self.wp_2th = np.array([1,1,1])
+            self.wp_1th = np.array(PL)[1]
+            self.wp_eth = np.array(PL)[-1]
+        elif len(PL) > 2:
+            self.dis_2th_wp = np.linalg.norm(np.array(PL)[2]-np.array(PL)[0])
+            self.wp_2th = np.array(PL)[2]
+            self.wp_1th = np.array(PL)[1]
+            self.wp_eth = np.array(PL)[-1]
+        elif len(PL) > 1:
+            self.dis_2th_wp = np.linalg.norm(np.array(PL)[1]-np.array(PL)[0])
+            self.wp_2th = np.array([0,0,0])
+            self.wp_1th = np.array(PL)[1]
+            self.wp_eth = np.array(PL)[-1]
     def pos_pcl(self,pcl,pos,vel):
         self.pos=pos
 #        assert isinstance(pcl, PointCloud2)
@@ -90,6 +115,7 @@ class convert_plc():
                                           self.octo_callback,queue_size=1,buff_size=52428800) #/octomap_point_cloud_centers
         # self.dynobs_publisher = rospy.Publisher("dyn_obs", Marker, queue_size=1)
         # self.dynv_publisher = rospy.Publisher("dyn_v", Marker, queue_size=1)
+        self.dir_path_sub = rospy.Subscriber('/direct_jps_path', Path, self.path_callback)
         self.dyn_publisher = rospy.Publisher("dyn", MarkerArray, queue_size=1)
         
         self.tss = ApproximateTimeSynchronizer([Subscriber('/filtered_RadiusOutlierRemoval',PointCloud2),
@@ -100,7 +126,7 @@ class convert_plc():
         # add_thread = threading.Thread(target = thread_job)
         # add_thread.start()
 #        rospy.spin()
-    
+
     def parse_local_position(self,local_position, mode="e"):
         # global rx,ry,rz,rpy_eular
         rx=local_position.pose.position.x
@@ -225,6 +251,10 @@ if __name__ == '__main__':
     convert.ang_vel=[0,0,0]
     convert.line_vel = np.array([0,0,0])
     local_pos = None
+    convert.dis_2th_wp = 4
+    convert.wp_1th = np.array([0,0,0])
+    convert.wp_2th = np.array([0,0,0])
+    convert.wp_eth = np.array([0,0,0])
     while not rospy.is_shutdown():
         starttime1 = time.clock()
         plc1=[]
@@ -421,11 +451,13 @@ if __name__ == '__main__':
             px,py,pz,r,p,y=convert.parse_local_position(convert.pos)
             local_pos=(convert.octo_time - convert.pos_time)*convert.line_vel + np.array([px,py,pz])
             if len(octo_plc)>0:
-                octo_plc=octo_plc-local_pos
-                octo_plc=octo_plc[(octo_plc<4).all(axis=1)]
-                octo_plc=octo_plc[octo_plc[:,2]>0.3]
-                octo_plc=convert.distance_filter(octo_plc,4)+local_pos
-            
+                # octo_plc=octo_plc+local_pos
+                convert.dis_2th_wp = max(3,convert.dis_2th_wp)
+                octo_plc=octo_plc[(abs(octo_plc)<convert.dis_2th_wp).all(axis=1)]
+                octo_plc=octo_plc[(octo_plc+local_pos)[:,2]>0.3]
+                octo_plc=convert.distance_filter(octo_plc,convert.dis_2th_wp)+local_pos
+                octo_plc=np.r_[octo_plc,np.array([convert.wp_1th,convert.wp_2th,convert.wp_eth])]
+                # print(octo_plc)
             point22=convert.xyz_array_to_pointcloud2(octo_plc,'map',rospy.Time.now())
             protime=time.clock()-starttime1
             # print('octo_plc-local num:',len(octo_plc))

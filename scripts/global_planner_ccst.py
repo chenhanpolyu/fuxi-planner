@@ -133,6 +133,7 @@ class global_planner():
 #        self.if_map_empty = 0
 #        self.octo_pub = rospy.Publisher('/octomap_point_cloud_centers_local', PointCloud2, queue_size=1)
         self.path_pub = rospy.Publisher('/jps_path', Path, queue_size=1)
+        self.dir_path_pub = rospy.Publisher('/direct_jps_path', Path, queue_size=1)
         self.map_pub=rospy.Publisher('/global_map', OccupancyGrid, queue_size=1)
         self.goalpub = rospy.Publisher('/goal_global', Point, queue_size=1)  #static points
         self.visualgoalpub = rospy.Publisher('/visual_goal_global', Marker, queue_size=1)
@@ -192,6 +193,22 @@ class global_planner():
             path.poses.append(pose)
         self.path_pub.publish(path)
         
+    def publish_dir_path(self, data,time_b):
+        path = Path()
+        path.header.frame_id = "map"
+        path.header.stamp = rospy.Time.now()
+        path.header.stamp.secs -= time_b
+        path.header.stamp.secs = max(0,path.header.stamp.secs)
+        for d in data:
+            pose = PoseStamped()
+            pose.header.frame_id = "map"
+            pose.header.stamp = rospy.Time.now()
+            pose.pose.position.x = d[0]
+            pose.pose.position.y = d[1]
+            pose.pose.position.z = d[2]
+
+            path.poses.append(pose)
+        self.dir_path_pub.publish(path)
     def publish_map(self,data,map_ori):
         data[np.where(data==1)]=100
         data[np.where(data==-1)]=0
@@ -238,6 +255,34 @@ class global_planner():
         abc = np.dot(np.matrix([y1,y2,y3]) , np.matrix([[x1**2,x1,1],[x2**2,x2,1],[x3**2,x3,1]]).T.I)
         
         return np.array(abc)[0]
+    def map_line_col(self,p2,p1,mapu):
+        blc_lt = np.where(mapu==1)
+        if len(blc_lt[0])>0:
+            p0 = np.array([min(p1[0],p2[0]),min(p1[1],p2[1])]).astype(float)
+            
+            p1=p1-p0
+            p2=p2-p0
+            if p2[0]<p1[0]:
+                p3=p2.copy()
+                p2=p1.copy()
+                p1=p3
+            # print(p1,p2,p0)
+            line_cross = np.c_[np.arange(p1[0]+1,p2[0],1).astype(int),np.rint((p2[1]-p1[1])/(p2[0]-p1[0])*np.arange(p1[0]+1,p2[0],1)).astype(int)+int(p1[1])]
+            
+            # if 
+            # for i range(len(blc_lt[0])):
+            line_cross = line_cross.tolist()
+            # print("desent",(p2[1]-p1[1])/(p2[0]-p1[0]),(p2[1]-p1[1])/(p2[0]-p1[0])*np.arange(p1[0]+1,p2[0],1))
+            # print(line_cross,np.array(blc_lt).T.tolist())
+            
+            for lb in line_cross:
+                # print(lb,np.array(blc_lt).T.tolist())
+                if lb in np.array(blc_lt).T.tolist():
+                    return False   # collide
+        print("no collision in map_line")      
+        return True   # if no collision, delete the middle point
+            
+        
 if __name__ == '__main__':
     # global pub,rate,point2,pos
     rospy.sleep(3)
@@ -254,6 +299,7 @@ if __name__ == '__main__':
     planner.octo_plc = None
     point_map = None
     path3=None
+    path4=None
     wp=None
     map_o=None
     rosrate=80
@@ -262,6 +308,8 @@ if __name__ == '__main__':
     ang_wp_tre=math.pi/4
     dis_wp_tre=2
     end_occu = 0
+    last_jps_pos = np.array([0,0,0])
+    last_jps_time = 0
     # global_goal_list=np.array([[15,0,1],[-12,-12,1],[0,12,1],[0,-12,1],[-16,-1,1]])
     ct=1 #iter time
     # try:
@@ -300,7 +348,7 @@ if __name__ == '__main__':
             map_reso=planner.map_reso
             mapu = planner.remove_zero_rowscols(planner.map ,px,py)
 #            print("removed empty,mapu",mapu)
-        if (mapu is not 0) and (global_goal is not None) and (planner.pos is not None) and (planner.map_reso is not None) and (planner.map_c1>2*ifa) and (planner.map_o is not None):#and (convert.vel is not None)
+        if (mapu is not 0) and (planner.map_c*planner.map_r >0) and (global_goal is not None) and (planner.pos is not None) and (planner.map_reso is not None) and (planner.map_c1>2*ifa) and (planner.map_o is not None):#and (convert.vel is not None)
 #            px,py,pz=planner.parse_local_position(planner.pos)
 
 #            map_reso=planner.map_reso
@@ -395,8 +443,8 @@ if __name__ == '__main__':
             # print(mapu_occu_list)
             # mapu_occu_ary = np.c_[np.array(mapu_occu_list[0]),np.array(mapu_occu_list[1])]
             # print(np.array(mapu_occu_ary))
-            for i in range(-ifa,ifa+1,ifa):
-                for j in range(-ifa,ifa+1,ifa):
+            for i in range(-ifa,ifa+1,1):
+                for j in range(-ifa,ifa+1,1):
                     mapu[(mapu_occu_list[0]+i,mapu_occu_list[1]+j)] = 1
             # mapu=mapc
             
@@ -408,6 +456,9 @@ if __name__ == '__main__':
                     map_goal[1]=np.where(mapu[map_goal[0],:]==0)[0][np.argmin(abs(np.where(mapu[map_goal[0],:]==0)-map_goal[1]))]
                 except:
                     map_goal[0]=np.where(mapu[:,map_goal[1]]==0)[0][np.argmin(abs(np.where(mapu[:,map_goal[1]]==0)-map_goal[0]))]
+                
+
+            if (mapu[map_goal[0]-ifa:map_goal[0]+ifa,map_goal[1]-ifa:map_goal[1]+ifa]==1).any():
                 end_occu = 1
             else:
                 end_occu = 0
@@ -419,15 +470,22 @@ if __name__ == '__main__':
 
             if (map_start)[0]>map_c or (map_start)[1]>map_r:
                 wp=global_goal
-            else:
+                # path4 = 
+                planner.publish_dir_path(np.array([[px,py,pz],wp]),100)
+                # path4 = None
+            elif (last_jps_pos[0] == 0 or np.linalg.norm(last_jps_pos-np.array([px,py,pz]))>0.3 or time.time()-last_jps_time>0.3) :
                 path1 = jps1.method(mapu, tuple(map_start), tuple(map_goal), 2)
-            
+                px,py,pz=planner.parse_local_position(planner.pos)
+                last_jps_pos = np.array([px,py,pz])
+                last_jps_time = time.time()
                 if path1[0] is 0:
                     # print(mapu,map_start,map_goal,map_o,path1) #
                     print('no path')
                     wp=global_goal
+                    planner.publish_dir_path(np.array([[px,py,pz],wp]),100)
                 else:
-                    path2 = np.array(path1[0])+np.array([0,0])
+                    path2 = np.array(path1[0])+np.array([1,0])
+                    path2_c = path2.copy()-np.array([1,0])
                     path3=path2*map_reso+map_o
                     # if end_occu == 1:
                     #     path3 = path3[::-1]
@@ -451,7 +509,21 @@ if __name__ == '__main__':
                         for ii in range(1,len(path3)):
                             if np.linalg.norm(path3[ii]-np.array([px,py,pz])) < 1.5:
                                 del_path.append(ii)
-                        path4 = np.delete(path3, del_path ,axis =0)
+                        path4 = np.delete(path4, del_path ,axis =0)
+                        path2_c  = np.delete(path2_c, del_path ,axis =0)
+
+                    ii=1
+                    while ii<len(path2_c)-1:
+                        if planner.map_line_col(path2_c[ii+1],path2_c[ii-1],mapu[min(path2_c[ii-1][0],path2_c[ii+1][0]):max(path2_c[ii-1][0],path2_c[ii+1][0]),min(path2_c[ii-1][1],path2_c[ii+1][1]):max(path2_c[ii-1][1],path2_c[ii+1][1])]):
+                            path4 = np.delete(path4, ii ,axis =0)
+                            path2_c  = np.delete(path2_c, ii ,axis =0)
+                        else:
+                            ii+=1
+                            
+                    if len(path4) >2:
+                        wp = (path4[1]*1.4 + path4[2]*0.6)/2
+                    else:
+                        wp = global_goal
                     # if len(path4) >2:
                     #     try:
                     #         poly_abc = planner.poly(path4[0,0],path4[0,1],path4[1,0],path4[1,1],path4[2,0],path4[2,1])
@@ -460,12 +532,8 @@ if __name__ == '__main__':
                     #         d_wp = np.array([math.sin(math.atan(abs(div))),np.sign(path4[1,0] - path4[0,0]) * div *math.sin(math.atan(abs(div)))])
                     #         wp = path3[0,0:2] + d_wp
                     #     except:
-                    #         wp = path3[-1,0:2]
-                    if len(path4) >2:
-                        wp = (path4[1]*0.5 + path4[2]*1.5)/2
-                        
-                    else:
-                        wp = global_goal
+                    #         # wp = path3[-1,0:2]
+                    #         wp = global_goal
                     if wp is None:
                         wp = global_goal
                     uav2next_wp=np.linalg.norm(wp[0:2]-np.array([px,py]))
@@ -488,7 +556,7 @@ if __name__ == '__main__':
             #     pointw.z=0
             # else:
             #     pointw.z=1+min(np.linalg.norm(wp[0:2]-np.array([xo,yo]))/np.linalg.norm(global_goal[0:2]-np.array([xo,yo])),1)*(global_goal[2]-1)
-            if np.linalg.norm(global_goal[0:2]-np.array([px,py]))<0.5 :
+            if np.linalg.norm(global_goal[0:2]-np.array([px,py]))<0.5 or end_occu:
                 pointw.z=0
             else:
                 pointw.z=1+min(np.linalg.norm(wp[0:2]-np.array([xo,yo]))/np.linalg.norm(global_goal[0:2]-np.array([xo,yo])),1)*(global_goal[2]-1)
@@ -496,7 +564,7 @@ if __name__ == '__main__':
 
         else:
             if planner.pos is not None:
-
+                print("map is not prepared,global goal:",planner.global_goal)
                 px,py,pz=planner.parse_local_position(planner.pos)
                 if planner.global_goal is not None:
                     global_goal = planner.global_goal
@@ -526,6 +594,8 @@ if __name__ == '__main__':
             planner.publish_goal([pointw.x,pointw.y,pointw.z])
             if path3 is not None:
                 planner.publish_path(path3)
+            if path4 is not None:
+                planner.publish_dir_path(path4,0)
             if (map_o is not None) and( mapu is not 0):
                 planner.publish_map(mapu,map_o)
             

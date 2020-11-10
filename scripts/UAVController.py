@@ -1,6 +1,7 @@
 import rospy
 
 from nav_msgs.msg import Odometry
+from nav_msgs.msg import OccupancyGrid,Path
 from sensor_msgs.msg import Imu,PointCloud2,PointField
 from mavros_msgs.msg import Altitude, ExtendedState, HomePosition, State, WaypointList, AttitudeTarget
 from geometry_msgs.msg import PoseStamped, TwistStamped,AccelStamped,PointStamped
@@ -41,7 +42,7 @@ class UAVController(object):
         self.goal=None
         self.ifend=0
         self.tick = 0
-        self.loc_goal_old=0 
+        self.loc_goal_old= np.array([0,0,1.5])
         self.old_goal=[]
         self.pretime=0
         self.f_angle=[float("Inf"),float("Inf")]
@@ -58,6 +59,12 @@ class UAVController(object):
         self.no_path = 1
         self.pp_restart = 0
         self.global_goal = None
+        self.d3_check_r = 0
+        self.d3_check = None
+        self.d3_time = 0
+        self.d3_pos = 0
+        self.glb_goal_3d = []
+        self.if_d3_goal = 0
         rospy.init_node('UAV_controller')
         rospy.loginfo("UAV_controller started!")
         self.goal_sub = rospy.Subscriber('/goal_global',
@@ -105,6 +112,7 @@ class UAVController(object):
             'mavros/setpoint_raw/attitude', AttitudeTarget, queue_size=10) 
         self.pcl_use_pub = rospy.Publisher('/points_global_use', PointCloud2, queue_size=1)
         
+        self.path_3d_pub = rospy.Publisher('path_3d', Path, queue_size=1)
         self.tss = ApproximateTimeSynchronizer([
                                                 # Subscriber('/gt_iris_base_link_imu', Odometry),
                                                 Subscriber('mavros/local_position/pose', PoseStamped),
@@ -115,7 +123,19 @@ class UAVController(object):
         self.globalgoal_sub = rospy.Subscriber('/move_base_simple/goal',
                                     PoseStamped,
                                     self.global_goal_callback,queue_size=1)
-        
+    def pub_3d_path(self, data):
+        path = Path()
+        path.header.frame_id = "map"
+        path.header.stamp = rospy.Time.now()
+        for d in data:
+            pose = PoseStamped()
+            pose.header.frame_id = "map"
+            pose.header.stamp = rospy.Time.now()
+            pose.pose.position.x = d[0]
+            pose.pose.position.y = d[1]
+            pose.pose.position.z = d[2]
+            path.poses.append(pose)
+        self.path_3d_pub.publish(path)
     def global_goal_callback(self,goal):
         self.global_goal = np.array([goal.pose.position.x, goal.pose.position.y, 1.5])
         print('goal received!!')
@@ -300,7 +320,7 @@ class UAVController(object):
         self.angular_velocity_estimator.append(data)
         
     def goal_callback(self,data):
-	print("goal::::",data)
+        print("goal::::",data)
         if self.goal is None:
             self.goal=np.array([data.x,data.y,data.z])
         if data.z==0:
@@ -394,6 +414,10 @@ class UAVController(object):
         plcall=[]
         if self.ros_data.get("plc", None) is not None:
             plc=self.ros_data["plc"]  #points of octomap
+            # print("plc:",plc)
+            self.d3_check = np.array(plc[-3::])
+            plc=plc[0:-3]
+            print("3d points received!",self.d3_check)
         if self.ros_data.get("plcall", None) is not None:
             plcall=self.ros_data["plcall"]  #points of depth camera
         rx,ry,rz,r,p,y=self.parse_local_position("e")
@@ -409,11 +433,16 @@ class UAVController(object):
         ax,ay,az=self.parse_linear_acc()
         
         state=np.array([local_pos[0],local_pos[1],local_pos[2],vx,vy,vz,ax,ay,az])
-        velo,self.loc_goal_old,self.f_angle,steptime,wptime,optitime,iternum,pointnum,self.dyn_time,self.pretime,plc_use,self.if_direct,self.no_path,traj_dif= control_method.start(plc,plcall,
+        # loc_goal_3d = self.glb_goal_3d - self.local_pos
+        velo,self.loc_goal_old,self.f_angle,steptime,wptime,optitime,iternum,pointnum,self.dyn_time,self.pretime,plc_use,self.if_direct,self.no_path,traj_dif,loc_goal_3d,self.d3_pos,self.if_d3_goal = control_method.start(plc,plcall,
                                                                                             state,loc_goal,local_ori[0],local_ori[1],local_ori[2],self.loc_goal_old,self.f_angle,self.path_rec,self.pretime,
-                                                                                            self.dyn_time,self.if_direct,self.no_path,self.pp_restart,self.pcl_time)
+                                                                                            self.dyn_time,self.if_direct,self.no_path,self.pp_restart,self.pcl_time,self.d3_check,self.d3_pos,self.glb_goal_3d,self.if_d3_goal)
         self.f1.write(str(pointnum)+" ,"+str(iternum)+" ,"+str(wptime)+" ,"+str(optitime)+" ,"+str(steptime)+" ,"+str(traj_dif)+"\n")
         print("write data")
+        if len(loc_goal_3d) !=0:
+            self.glb_goal_3d = loc_goal_3d+self.local_pos
+        else:
+            self.glb_goal_3d = []
         self.velo_goal=self.loc_goal_old*0.5+local_pos
         self.steptime.append(steptime)
         vel = TwistStamped()
@@ -422,7 +451,16 @@ class UAVController(object):
         vel.header.stamp = rospy.Time.now()
         if self.global_goal is None:
             self.global_goal = self.goal
-        yaw=math.atan2(self.goal[1]-ry,self.goal[0]-rx)
+        print("self.if_d3_goal",self.if_d3_goal)
+        # if len(self.glb_goal_3d) and (self.if_d3_goal)<0.5: #or np.linalg.norm(self.local_pos-self.d3_pos)
+        #     yaw_goal = self.glb_goal_3d
+        # else:
+        #     yaw_goal = self.goal
+        if self.d3_check is not None:
+            yaw_goal = self.d3_check[-1]
+        else:
+            yaw_goal = self.global_goal
+        yaw=math.atan2(yaw_goal[1]-ry,yaw_goal[0]-rx)
         if abs(yaw-y)>math.pi:
             yaw=(2*math.pi-abs(yaw))*np.sign(-yaw)
 #        if abs(yaw-y)>math.pi/10:
@@ -444,14 +482,15 @@ class UAVController(object):
 #           yaw=(2*math.pi-abs(yaw))*np.sign(-yaw)
 #        vel.angular.z = self.pid.step(yaw-y)
         self.vel=vel
-        if abs(yaw-y) > math.pi/6: #len(self.old_goal)!= 0 and (self.old_goal != self.goal).any():
-            while abs(yaw-y)>math.pi/6:
+        if abs(yaw-y) > math.pi/2: #len(self.old_goal)!= 0 and (self.old_goal != self.goal).any():
+            while abs(yaw-y)>math.pi/2:
             #for i in range(10):
                 rx,ry,rz,r,p,y=self.parse_local_position("e")
-                yaw=math.atan2(self.goal[1]-ry,self.goal[0]-rx)
-      	        if abs(yaw-y)>math.pi:
+                yaw=math.atan2(yaw_goal[1]-ry,yaw_goal[0]-rx)
+                if abs(yaw-y)>math.pi:
                     yaw=(2*math.pi-abs(yaw))*np.sign(-yaw)
-                self.set_local_position(rx,ry,1.5,y+(yaw-y)*0.1)
+                self.set_local_position(rx,ry,1.5,y+(yaw-y)*0.2)
+                # self.set_local_position(rx,ry,1.5,yaw)
                 print(yaw,y)
                 rospy.sleep(0.02)
             print("position cmd published!")
@@ -465,12 +504,19 @@ class UAVController(object):
                 del self.path_rec[-2::]
         else:
             self.pos_setvel_pub.publish(self.vel)
-	    print("velocity cmd published!-uav controller")
+            print("velocity cmd published!-uav controller")
             self.pp_restart = 0
         self.old_goal = self.global_goal.copy()
-        if len(plc_use) !=0:
+        if len(plc_use):
             plc_use=self.xyz_array_to_pointcloud2(np.array(plc_use),'map',rospy.Time.now())
             self.pcl_use_pub.publish(plc_use)
+        if self.d3_check is not None:
+            if len(self.glb_goal_3d) and (self.if_d3_goal):  #==1 or np.linalg.norm(self.local_pos-self.d3_pos))<0.5 
+                self.pub_3d_path([local_pos,self.glb_goal_3d,self.d3_check[-1]])
+            else: 
+                self.pub_3d_path([local_pos])
+             
+            print("3d path published")
     def set_accel(self):
         plc=self.ros_data["plc"]
         rx,ry,rz,r,p,y=self.parse_local_position("e")

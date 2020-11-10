@@ -12,6 +12,7 @@ import sklearn.cluster as skc
 from visualization_msgs.msg import Marker,MarkerArray
 import math
 from message_filters import TimeSynchronizer, Subscriber,ApproximateTimeSynchronizer
+from nav_msgs.msg import Path
 class convert_plc():
     def callback(self,data):
         #y.loginfo(rospy.get_caller_id() + "I heard %s", data.data)
@@ -357,7 +358,7 @@ if __name__ == '__main__':
             
             if len(octo_plc)>0:
                 octo_plc=octo_plc-local_pos
-                octo_plc=octo_plc[(octo_plc<4).all(axis=1)]
+                octo_plc=octo_plc[(abs(octo_plc)<4).all(axis=1)]
                 octo_plc=convert.distance_filter(octo_plc,4)+local_pos
             
             point22=convert.xyz_array_to_pointcloud2(octo_plc,'map',rospy.Time.now())
